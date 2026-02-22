@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AdminRepartos - Gestión de Repartos</title>
+    <style>
+        * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; }
+        body { background: #f4f6f9; padding: 1rem; min-height: 100vh; display: flex; justify-content: center; }
+        #app { max-width: 1400px; width: 100%; background: white; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden; }
+        header { background: #1e2b3a; color: white; padding: 1rem 2rem; display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem; }
+        header h1 { font-size: 1.8rem; font-weight: 400; margin-right: auto; }
+        .nav-btn { background: transparent; border: none; color: #ccc; font-size: 1rem; padding: 0.5rem 1rem; cursor: pointer; border-radius: 30px; transition: 0.2s; }
+        .nav-btn:hover { background: #2c3e50; color: white; }
+        .nav-btn.active { background: #3b4e62; color: white; font-weight: 500; }
+        main { padding: 2rem; }
+        .views-container > div { display: none; }
+        .views-container > div.active-view { display: block; }
+        h2 { margin-bottom: 1.5rem; color: #1e2b3a; font-weight: 400; border-bottom: 2px solid #eaeef2; padding-bottom: 0.5rem; }
+        button, .btn { background: #1e2b3a; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 30px; font-size: 0.95rem; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
+        button:hover { background: #2c3e50; }
+        button.secondary { background: white; color: #1e2b3a; border: 1px solid #1e2b3a; }
+        button.secondary:hover { background: #f0f3f7; }
+        .card { background: white; border-radius: 16px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #eaeef2; margin-bottom: 2rem; }
+        .flex-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1.5rem; }
+        .search-box { flex: 1; min-width: 250px; padding: 0.7rem 1rem; border-radius: 30px; border: 1px solid #d0d9e2; font-size: 1rem; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+        th, td { padding: 1rem; text-align: left; border-bottom: 1px solid #eaeef2; }
+        th { background: #f8fafc; font-weight: 500; color: #2c3e50; }
+        tr:hover { background: #f9fcff; }
+        .badge { display: inline-block; padding: 0.25rem 0.8rem; border-radius: 30px; font-size: 0.85rem; font-weight: 500; }
+        .badge.pendiente { background: #fff3cd; color: #856404; }
+        .badge.entregado { background: #d4edda; color: #155724; }
+        .badge.incompleto { background: #f8d7da; color: #721c24; }
+        .actions-cell { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .icon-btn { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; padding: 0.2rem 0.5rem; border-radius: 8px; }
+        .icon-btn:hover { background: #e9ecef; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.3rem; font-weight: 500; color: #2c3e50; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.7rem 1rem; border-radius: 30px; border: 1px solid #d0d9e2; font-size: 1rem; }
+        .form-group textarea { border-radius: 16px; resize: vertical; min-height: 80px; }
+        .photo-preview { max-width: 150px; max-height: 150px; border-radius: 8px; border: 1px solid #ccc; margin-top: 0.5rem; }
+        .product-item { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+        .product-item input { flex: 1; }
+        .remove-product { background: #f8d7da; color: #721c24; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; }
+        .file-upload { border: 2px dashed #b8c5d0; border-radius: 30px; padding: 1.5rem; text-align: center; background: #fcfdff; cursor: pointer; }
+        .file-upload:hover { background: #f2f6fa; }
+        .alert { padding: 1rem; border-radius: 30px; margin-bottom: 1rem; }
+        .alert.success { background: #d4edda; color: #155724; }
+        .alert.error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <header>
+        <h1>📦 AdminRepartos</h1>
+        <button class="nav-btn" data-view="orders">📋 Pedidos</button>
+        <button class="nav-btn" data-view="customers">👥 Clientes</button>
+        <button class="nav-btn" data-view="products">📦 Productos</button>
+        <button class="nav-btn" data-view="backup">💾 Backup</button>
+    </header>
+    <main>
+        <div class="views-container" id="viewsContainer">
+            <!-- Pedidos -->
+            <div id="view-orders" class="active-view">
+                <div class="flex-row">
+                    <h2>📋 Lista de Pedidos</h2>
+                    <button id="newOrderBtn" class="secondary">➕ Nuevo pedido</button>
+                </div>
+                <div class="flex-row">
+                    <input type="text" id="searchOrders" class="search-box" placeholder="🔍 Buscar por cliente o estado...">
+                    <select id="statusFilter">
+                        <option value="todos">Todos los estados</option>
+                        <option value="pendiente">Pendiente</option>
+                        <option value="entregado">Entregado</option>
+                        <option value="incompleto">Incompleto</option>
+                    </select>
+                </div>
+                <div id="ordersList"></div>
+            </div>
+            <!-- Clientes -->
+            <div id="view-customers">
+                <div class="flex-row">
+                    <h2>👥 Clientes</h2>
+                    <button id="newCustomerBtn" class="secondary">➕ Nuevo cliente</button>
+                </div>
+                <div id="customersList"></div>
+            </div>
+            <!-- Productos -->
+            <div id="view-products">
+                <h2>📦 Productos (para autocompletado)</h2>
+                <div class="card">
+                    <p style="margin-bottom:1rem">Subí un archivo CSV con una columna "nombre" (y opcional "precio") para cargar productos.</p>
+                    <div class="file-upload" id="dropZone">
+                        📂 Arrastrá o hacé clic para seleccionar archivo CSV
+                        <input type="file" id="productFile" accept=".csv, text/csv" style="display: none;">
+                    </div>
+                    <div id="productList" style="margin-top:2rem"></div>
+                    <button id="clearProducts" class="secondary" style="margin-top:1rem">🗑️ Limpiar productos</button>
+                </div>
+            </div>
+            <!-- Backup -->
+            <div id="view-backup">
+                <h2>💾 Respaldos</h2>
+                <div class="card">
+                    <button id="exportBackup" style="width:100%; margin-bottom:1rem">📥 Exportar datos (backup.json)</button>
+                    <div class="file-upload" id="importZone">
+                        📂 Arrastrá o hacé clic para restaurar backup (JSON)
+                        <input type="file" id="importFile" accept=".json, application/json" style="display: none;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Modal oculto para formulario de pedido (se muestra dinámicamente) -->
+<div id="orderModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
+    <div style="background:white; border-radius:30px; width:90%; max-width:800px; max-height:90vh; overflow:auto; padding:2rem;">
+        <h3 id="modalTitle">➕ Nuevo Pedido</h3>
+        <form id="orderForm">
+            <input type="hidden" id="orderId">
+            <div class="form-grid">
+                <div>
+                    <div class="form-group">
+                        <label>Cliente</label>
+                        <select id="customerSelect" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha</label>
+                        <input type="datetime-local" id="orderDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Estado</label>
+                        <select id="orderStatus">
+                            <option value="pendiente">Pendiente</option>
+                            <option value="entregado">Entregado</option>
+                            <option value="incompleto">Incompleto</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <div class="form-group">
+                        <label>Comentarios</label>
+                        <textarea id="orderComments" placeholder="Notas del pedido..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Foto del ticket</label>
+                        <input type="file" id="ticketPhoto" accept="image/*">
+                        <div id="photoPreviewContainer"></div>
+                    </div>
+                </div>
+            </div>
+            <fieldset style="border:1px solid #eaeef2; border-radius:20px; padding:1rem; margin:1rem 0;">
+                <legend>📦 Productos en el pedido</legend>
+                <div id="productsContainer"></div>
+                <button type="button" id="addProductBtn" class="secondary" style="margin-top:0.5rem">➕ Agregar producto</button>
+            </fieldset>
+            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
+                <button type="button" id="cancelOrderBtn" class="secondary">Cancelar</button>
+                <button type="submit" id="saveOrderBtn">Guardar pedido</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal para cliente -->
+<div id="customerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
+    <div style="background:white; border-radius:30px; width:90%; max-width:500px; padding:2rem;">
+        <h3 id="customerModalTitle">👤 Nuevo Cliente</h3>
+        <form id="customerForm">
+            <input type="hidden" id="customerId">
+            <div class="form-group">
+                <label>Nombre *</label>
+                <input type="text" id="customerName" required>
+            </div>
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input type="text" id="customerPhone">
+            </div>
+            <div class="form-group">
+                <label>Dirección</label>
+                <input type="text" id="customerAddress">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="customerEmail">
+            </div>
+            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
+                <button type="button" id="cancelCustomerBtn" class="secondary">Cancelar</button>
+                <button type="submit" id="saveCustomerBtn">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    (function() {
+        // --- Estado inicial y claves de localStorage ---
+        const STORAGE_KEYS = {
+            CUSTOMERS: 'repartos_customers',
+            PRODUCTS: 'repartos_products',
+            ORDERS: 'repartos_orders'
+        };
+
+        // Datos de ejemplo
+        let customers = [
+            { id: 'c1', name: 'Juan Pérez', phone: '11 1234-5678', address: 'Av. Siempreviva 123', email: 'juan@mail.com' },
+            { id: 'c2', name: 'María Gómez', phone: '11 8765-4321', address: 'Calle Falsa 456', email: 'maria@mail.com' }
+        ];
+        let products = [
+            { id: 'p1', name: 'Arroz 1kg', price: 120 },
+            { id: 'p2', name: 'Fideos 500g', price: 90 },
+            { id: 'p3', name: 'Aceite 1.5L', price: 350 }
+        ];
+        let orders = [
+            { id: 'o1', customerId: 'c1', date: '2025-03-15T10:30', status: 'pendiente', comments: 'Llamar antes de llegar', items: [{ productId: 'p1', productName: 'Arroz 1kg', quantity: 2, price: 120 }], ticketPhoto: '' },
+            { id: 'o2', customerId: 'c2', date: '2025-03-16T15:45', status: 'entregado', comments: 'Dejar con el portero', items: [{ productId: 'p2', productName: 'Fideos 500g', quantity: 3, price: 90 }], ticketPhoto: '' }
+        ];
+
+        // Cargar desde localStorage si existe
+        function loadFromStorage() {
+            try {
+                const storedCustomers = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
+                if (storedCustomers) customers = JSON.parse(storedCustomers);
+                const storedProducts = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+                if (storedProducts) products = JSON.parse(storedProducts);
+                const storedOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
+                if (storedOrders) orders = JSON.parse(storedOrders);
+            } catch (e) {
+                console.warn('Error cargando datos', e);
+            }
+        }
+        loadFromStorage();
+
+        // Guardado automático
+        function saveToStorage() {
+            localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+            localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+        }
+
+        // Utilidades: generar ID simple
+        function generateId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 9); }
+
+        // ----- Referencias a elementos DOM -----
+        const viewsContainer = document.getElementById('viewsContainer');
+        const navBtns = document.querySelectorAll('.nav-btn');
+        const newOrderBtn = document.getElementById('newOrderBtn');
+        const searchOrders = document.getElementById('searchOrders');
+        const statusFilter = document.getElementById('statusFilter');
+        const ordersListDiv = document.getElementById('ordersList');
+        const customersListDiv = document.getElementById('customersList');
+        const productListDiv = document.getElementById('productList');
+        const newCustomerBtn = document.getElementById('newCustomerBtn');
+        const productFile = document.getElementById('productFile');
+        const dropZone = document.getElementById('dropZone');
+        const clearProductsBtn = document.getElementById('clearProducts');
+        const exportBackupBtn = document.getElementById('exportBackup');
+        const importZone = document.getElementById('importZone');
+        const importFile = document.getElementById('importFile');
+
+        // Modales
+        const orderModal = document.getElementById('orderModal');
+        const customerModal = document.getElementById('customerModal');
+        const orderForm = document.getElementById('orderForm');
+        const customerForm = document.getElementById('customerForm');
+        const cancelOrderBtn = document.getElementById('cancelOrderBtn');
+        const cancelCustomerBtn = document.getElementById('cancelCustomerBtn');
+        const addProductBtn = document.getElementById('addProductBtn');
+        const productsContainer = document.getElementById('productsContainer');
+        const customerSelect = document.getElementById('customerSelect');
+        const orderDate = document.getElementById('orderDate');
+        const orderStatus = document.getElementById('orderStatus');
+        const orderComments = document.getElementById('orderComments');
+        const ticketPhoto = document.getElementById('ticketPhoto');
+        const photoPreviewContainer = document.getElementById('photoPreviewContainer');
+        const orderIdHidden = document.getElementById('orderId');
+        const modalTitle = document.getElementById('modalTitle');
+
+        // Cliente modal fields
+        const customerIdHidden = document.getElementById('customerId');
+        const customerName = document.getElementById('customerName');
+        const customerPhone = document.getElementById('customerPhone');
+        const customerAddress = document.getElementById('customerAddress');
+        const customerEmail = document.getElementById('customerEmail');
+        const customerModalTitle = document.getElementById('customerModalTitle');
+
+        // ---- Cambio de vistas ----
+        function setActiveView(viewId) {
+            document.querySelectorAll('.views-container > div').forEach(div => div.classList.remove('active-view'));
+            document.getElementById(`view-${viewId}`).classList.add('active-view');
+            navBtns.forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`.nav-btn[data-view="${viewId}"]`).classList.add('active');
+            if (viewId === 'orders') renderOrders();
+            if (viewId === 'customers') renderCustomers();
+            if (viewId === 'products') renderProductsList();
+        }
+
+        navBtns.forEach(btn => {
+            btn.addEventListener('click', () => setActiveView(btn.dataset.view));
+        });
+
+        // ---- Renderizado de Pedidos ----
+        function renderOrders() {
+            const filterText = searchOrders ? searchOrders.value.toLowerCase() : '';
+            const filterStatus = statusFilter ? statusFilter.value : 'todos';
+            let filtered = orders.filter(order => {
+                const customer = customers.find(c => c.id === order.customerId);
+                const customerName = customer ? customer.name.toLowerCase() : '';
+                const matchesText = customerName.includes(filterText) || order.status.includes(filterText) || (order.comments && order.comments.toLowerCase().includes(filterText));
+                const matchesStatus = filterStatus === 'todos' || order.status === filterStatus;
+                return matchesText && matchesStatus;
+            });
+            if (!ordersListDiv) return;
+            if (filtered.length === 0) {
+                ordersListDiv.innerHTML = '<p class="card">No hay pedidos.</p>';
+                return;
+            }
+            let html = '<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Estado</th><th>Productos</th><th>Comentarios</th><th>Acciones</th></tr></thead><tbody>';
+            filtered.forEach(order => {
+                const customer = customers.find(c => c.id === order.customerId) || { name: '?' };
+                const itemsText = order.items.map(i => `${i.productName} x${i.quantity}`).join(', ');
+                html += `<tr>
+                    <td>${new Date(order.date).toLocaleString()}</td>
+                    <td>${customer.name}</td>
+                    <td><span class="badge ${order.status}">${order.status}</span></td>
+                    <td>${itemsText}</td>
+                    <td>${order.comments || ''}</td>
+                    <td class="actions-cell">
+                        <button class="icon-btn edit-order" data-id="${order.id}">✏️</button>
+                        <button class="icon-btn delete-order" data-id="${order.id}">🗑️</button>
+                        ${order.ticketPhoto ? '<a href="' + order.ticketPhoto + '" target="_blank" class="icon-btn">📷</a>' : ''}
+                    </td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            ordersListDiv.innerHTML = html;
+
+            // Asignar eventos
+            document.querySelectorAll('.edit-order').forEach(btn => btn.addEventListener('click', (e) => openOrderModal(e.target.dataset.id)));
+            document.querySelectorAll('.delete-order').forEach(btn => btn.addEventListener('click', (e) => deleteOrder(e.target.dataset.id)));
+        }
+
+        function deleteOrder(id) {
+            if (confirm('¿Eliminar pedido?')) {
+                orders = orders.filter(o => o.id !== id);
+                saveToStorage();
+                renderOrders();
+            }
+        }
+
+        // ---- Clientes ----
+        function renderCustomers() {
+            if (!customersListDiv) return;
+            if (customers.length === 0) {
+                customersListDiv.innerHTML = '<p class="card">No hay clientes.</p>';
+                return;
+            }
+            let html = '<table><thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Email</th><th>Acciones</th></tr></thead><tbody>';
+            customers.forEach(c => {
+                html += `<tr>
+                    <td>${c.name}</td>
+                    <td>${c.phone || ''}</td>
+                    <td>${c.address || ''}</td>
+                    <td>${c.email || ''}</td>
+                    <td class="actions-cell">
+                        <button class="icon-btn edit-customer" data-id="${c.id}">✏️</button>
+                        <button class="icon-btn delete-customer" data-id="${c.id}">🗑️</button>
+                    </td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            customersListDiv.innerHTML = html;
+            document.querySelectorAll('.edit-customer').forEach(btn => btn.addEventListener('click', (e) => openCustomerModal(e.target.dataset.id)));
+            document.querySelectorAll('.delete-customer').forEach(btn => btn.addEventListener('click', (e) => deleteCustomer(e.target.dataset.id)));
+        }
+
+        function deleteCustomer(id) {
+            if (orders.some(o => o.customerId === id)) {
+                alert('No se puede eliminar un cliente con pedidos asociados.');
+                return;
+            }
+            if (confirm('¿Eliminar cliente?')) {
+                customers = customers.filter(c => c.id !== id);
+                saveToStorage();
+                renderCustomers();
+            }
+        }
+
+        // ---- Productos ----
+        function renderProductsList() {
+            if (!productListDiv) return;
+            if (products.length === 0) {
+                productListDiv.innerHTML = '<p>No hay productos cargados. Subí un archivo CSV.</p>';
+                return;
+            }
+            let html = '<table><thead><tr><th>Nombre</th><th>Precio (opcional)</th></tr></thead><tbody>';
+            products.forEach(p => {
+                html += `<tr><td>${p.name}</td><td>${p.price ? '$' + p.price : '-'}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            productListDiv.innerHTML = html;
+        }
+
+        // ---- Modal de Pedido ----
+        function openOrderModal(orderId = null) {
+            const isEdit = !!orderId;
+            modalTitle.innerText = isEdit ? '✏️ Editar Pedido' : '➕ Nuevo Pedido';
+            // Limpiar form
+            orderForm.reset();
+            orderIdHidden.value = '';
+            productsContainer.innerHTML = '';
+            photoPreviewContainer.innerHTML = '';
+            // Cargar clientes en select
+            customerSelect.innerHTML = '<option value="">Seleccionar cliente</option>' + customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            // Si es edición, cargar datos
+            if (isEdit) {
+                const order = orders.find(o => o.id === orderId);
+                if (!order) return;
+                orderIdHidden.value = order.id;
+                customerSelect.value = order.customerId;
+                orderDate.value = order.date;
+                orderStatus.value = order.status;
+                orderComments.value = order.comments || '';
+                // Productos
+                order.items.forEach(item => addProductRow(item));
+                if (order.ticketPhoto) {
+                    const img = document.createElement('img');
+                    img.src = order.ticketPhoto;
+                    img.className = 'photo-preview';
+                    photoPreviewContainer.appendChild(img);
+                }
+            } else {
+                // Fecha por defecto: ahora
+                const now = new Date();
+                const tzOffset = now.getTimezoneOffset() * 60000;
+                const localISOTime = new Date(now - tzOffset).toISOString().slice(0, 16);
+                orderDate.value = localISOTime;
+                // Agregar una fila de producto vacía
+                addProductRow();
+            }
+            orderModal.style.display = 'flex';
+        }
+
+        function addProductRow(item = null) {
+            const div = document.createElement('div');
+            div.className = 'product-item';
+            div.innerHTML = `
+                <input type="text" placeholder="Producto" list="productDatalist" value="${item ? item.productName : ''}" class="product-name">
+                <input type="number" placeholder="Cant" value="${item ? item.quantity : 1}" min="1" style="width:80px;" class="product-qty">
+                <input type="number" placeholder="Precio" value="${item ? item.price : ''}" min="0" step="0.01" style="width:100px;" class="product-price">
+                <button type="button" class="remove-product">✕</button>
+            `;
+            div.querySelector('.remove-product').addEventListener('click', () => div.remove());
+            productsContainer.appendChild(div);
+        }
+
+        // Cerrar modales
+        cancelOrderBtn.addEventListener('click', () => orderModal.style.display = 'none');
+        cancelCustomerBtn.addEventListener('click', () => customerModal.style.display = 'none');
+        window.addEventListener('click', (e) => {
+            if (e.target === orderModal) orderModal.style.display = 'none';
+            if (e.target === customerModal) customerModal.style.display = 'none';
+        });
+
+        // Guardar pedido
+        orderForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const customerId = customerSelect.value;
+            if (!customerId) return alert('Seleccioná un cliente');
+            const items = [];
+            document.querySelectorAll('#productsContainer .product-item').forEach(row => {
+                const nameInput = row.querySelector('.product-name');
+                const qtyInput = row.querySelector('.product-qty');
+                const priceInput = row.querySelector('.product-price');
+                if (nameInput.value.trim() !== '') {
+                    items.push({
+                        productId: null, // podríamos buscar por nombre, pero simplificamos
+                        productName: nameInput.value.trim(),
+                        quantity: parseInt(qtyInput.value) || 1,
+                        price: parseFloat(priceInput.value) || 0
+                    });
+                }
+            });
+            if (items.length === 0) return alert('Agregá al menos un producto');
+
+            // Foto
+            let ticketPhotoBase64 = '';
+            const photoImg = photoPreviewContainer.querySelector('img');
+            if (photoImg) ticketPhotoBase64 = photoImg.src;
+
+            const orderData = {
+                id: orderIdHidden.value || generateId(),
+                customerId,
+                date: orderDate.value,
+                status: orderStatus.value,
+                comments: orderComments.value,
+                items,
+                ticketPhoto: ticketPhotoBase64
+            };
+
+            if (orderIdHidden.value) {
+                orders = orders.map(o => o.id === orderData.id ? orderData : o);
+            } else {
+                orders.push(orderData);
+            }
+            saveToStorage();
+            orderModal.style.display = 'none';
+            renderOrders();
+        });
+
+        // Foto preview
+        ticketPhoto.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    photoPreviewContainer.innerHTML = `<img src="${ev.target.result}" class="photo-preview">`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Agregar producto dinámico
+        addProductBtn.addEventListener('click', () => addProductRow());
+
+        // ---- Modal Cliente ----
+        function openCustomerModal(id = null) {
+            customerModalTitle.innerText = id ? '✏️ Editar Cliente' : '👤 Nuevo Cliente';
+            customerForm.reset();
+            customerIdHidden.value = '';
+            if (id) {
+                const cust = customers.find(c => c.id === id);
+                if (cust) {
+                    customerIdHidden.value = cust.id;
+                    customerName.value = cust.name;
+                    customerPhone.value = cust.phone || '';
+                    customerAddress.value = cust.address || '';
+                    customerEmail.value = cust.email || '';
+                }
+            }
+            customerModal.style.display = 'flex';
+        }
+
+        customerForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const custData = {
+                id: customerIdHidden.value || generateId(),
+                name: customerName.value.trim(),
+                phone: customerPhone.value.trim(),
+                address: customerAddress.value.trim(),
+                email: customerEmail.value.trim()
+            };
+            if (!custData.name) return alert('El nombre es obligatorio');
+            if (customerIdHidden.value) {
+                customers = customers.map(c => c.id === custData.id ? custData : c);
+            } else {
+                customers.push(custData);
+            }
+            saveToStorage();
+            customerModal.style.display = 'none';
+            renderCustomers();
+        });
+
+        newCustomerBtn.addEventListener('click', () => openCustomerModal());
+        newOrderBtn.addEventListener('click', () => openOrderModal());
+
+        // Filtros de pedidos
+        if (searchOrders) searchOrders.addEventListener('input', renderOrders);
+        if (statusFilter) statusFilter.addEventListener('change', renderOrders);
+
+        // ---- Productos: carga CSV ----
+        function parseCSV(text) {
+            const lines = text.split('\n').filter(l => l.trim() !== '');
+            if (lines.length === 0) return [];
+            const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const nameIdx = headers.indexOf('nombre');
+            const priceIdx = headers.indexOf('precio');
+            if (nameIdx === -1) throw new Error('El CSV debe tener una columna "nombre"');
+            const result = [];
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(v => v.trim());
+                if (values.length <= nameIdx) continue;
+                const name = values[nameIdx];
+                if (!name) continue;
+                const price = priceIdx !== -1 && values[priceIdx] ? parseFloat(values[priceIdx]) : undefined;
+                result.push({ id: generateId(), name, price: isNaN(price) ? undefined : price });
+            }
+            return result;
+        }
+
+        dropZone.addEventListener('click', () => productFile.click());
+        dropZone.addEventListener('dragover', (e) => e.preventDefault());
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file) handleProductFile(file);
+        });
+        productFile.addEventListener('change', (e) => {
+            if (e.target.files[0]) handleProductFile(e.target.files[0]);
+        });
+
+        function handleProductFile(file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const newProducts = parseCSV(ev.target.result);
+                    products = newProducts; // reemplazar
+                    saveToStorage();
+                    renderProductsList();
+                    alert('Productos cargados correctamente');
+                } catch (err) {
+                    alert('Error al leer CSV: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        clearProductsBtn.addEventListener('click', () => {
+            if (confirm('¿Eliminar todos los productos?')) {
+                products = [];
+                saveToStorage();
+                renderProductsList();
+            }
+        });
+
+        // ---- Backup ----
+        exportBackupBtn.addEventListener('click', () => {
+            const backup = { customers, products, orders };
+            const dataStr = JSON.stringify(backup, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        importZone.addEventListener('click', () => importFile.click());
+        importZone.addEventListener('dragover', (e) => e.preventDefault());
+        importZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file) handleImport(file);
+        });
+        importFile.addEventListener('change', (e) => {
+            if (e.target.files[0]) handleImport(e.target.files[0]);
+        });
+
+        function handleImport(file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    if (data.customers) customers = data.customers;
+                    if (data.products) products = data.products;
+                    if (data.orders) orders = data.orders;
+                    saveToStorage();
+                    alert('Restauración exitosa');
+                    // Recargar vista activa
+                    const active = document.querySelector('.nav-btn.active')?.dataset.view || 'orders';
+                    setActiveView(active);
+                } catch (err) {
+                    alert('Archivo inválido: ' + err);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Inicializar vistas
+        setActiveView('orders');
+        // Datalist global para productos
+        const datalist = document.createElement('datalist');
+        datalist.id = 'productDatalist';
+        document.body.appendChild(datalist);
+        function updateProductDatalist() {
+            datalist.innerHTML = products.map(p => `<option value="${p.name}">${p.price ? '$'+p.price : ''}</option>`).join('');
+        }
+        updateProductDatalist();
+        // Observar cambios en productos para actualizar datalist
+        const originalSave = saveToStorage;
+        saveToStorage = function() {
+            originalSave();
+            updateProductDatalist();
+        };
+        // Reemplazar para que cada guardado actualice datalist
+        window.saveToStorage = saveToStorage;
+
+        // Exponer funciones globales necesarias
+        window.renderOrders = renderOrders;
+        window.renderCustomers = renderCustomers;
+        window.renderProductsList = renderProductsList;
+        window.openOrderModal = openOrderModal;
+        window.openCustomerModal = openCustomerModal;
+        window.deleteOrder = deleteOrder;
+        window.deleteCustomer = deleteCustomer;
+
+        // Cargar datalist inicial
+        updateProductDatalist();
+    })();
+</script>
+</body>
+</html>
