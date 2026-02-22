@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AdminRepartos - Gestión de Repartos</title>
+    <!-- Librería para leer Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
         * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; }
         body { background: #f4f6f9; padding: 1rem; min-height: 100vh; display: flex; justify-content: center; }
@@ -49,6 +51,9 @@
         .alert { padding: 1rem; border-radius: 30px; margin-bottom: 1rem; }
         .alert.success { background: #d4edda; color: #155724; }
         .alert.error { background: #f8d7da; color: #721c24; }
+        /* Indicador de carga */
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #1e2b3a; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; margin-right: 8px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -91,10 +96,10 @@
             <div id="view-products">
                 <h2>📦 Productos (para autocompletado)</h2>
                 <div class="card">
-                    <p style="margin-bottom:1rem">Subí un archivo CSV con una columna "nombre" (y opcional "precio") para cargar productos.</p>
+                    <p style="margin-bottom:1rem">Subí un archivo CSV (columna "nombre") o Excel (XLSX, XLS) para cargar productos.</p>
                     <div class="file-upload" id="dropZone">
-                        📂 Arrastrá o hacé clic para seleccionar archivo CSV
-                        <input type="file" id="productFile" accept=".csv, text/csv" style="display: none;">
+                        📂 Arrastrá o hacé clic para seleccionar archivo (CSV o Excel)
+                        <input type="file" id="productFile" accept=".csv, text/csv, .xls, .xlsx, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display: none;">
                     </div>
                     <div id="productList" style="margin-top:2rem"></div>
                     <button id="clearProducts" class="secondary" style="margin-top:1rem">🗑️ Limpiar productos</button>
@@ -115,7 +120,7 @@
     </main>
 </div>
 
-<!-- Modal oculto para formulario de pedido (se muestra dinámicamente) -->
+<!-- Modal oculto para formulario de pedido -->
 <div id="orderModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
     <div style="background:white; border-radius:30px; width:90%; max-width:800px; max-height:90vh; overflow:auto; padding:2rem;">
         <h3 id="modalTitle">➕ Nuevo Pedido</h3>
@@ -393,7 +398,7 @@
         function renderProductsList() {
             if (!productListDiv) return;
             if (products.length === 0) {
-                productListDiv.innerHTML = '<p>No hay productos cargados. Subí un archivo CSV.</p>';
+                productListDiv.innerHTML = '<p>No hay productos cargados. Subí un archivo CSV o Excel.</p>';
                 return;
             }
             let html = '<table><thead><tr><th>Nombre</th><th>Precio (opcional)</th></tr></thead><tbody>';
@@ -571,24 +576,106 @@
         if (searchOrders) searchOrders.addEventListener('input', renderOrders);
         if (statusFilter) statusFilter.addEventListener('change', renderOrders);
 
-        // ---- Productos: carga CSV ----
+        // ---- Productos: carga CSV o Excel ----
+        // Función para procesar archivo (CSV o Excel) y actualizar productos
+        function handleProductFile(file) {
+            const reader = new FileReader();
+            const fileType = file.name.split('.').pop().toLowerCase();
+            
+            // Mostrar indicador de carga
+            dropZone.innerHTML = `<span class="spinner"></span> Procesando archivo...`;
+
+            if (fileType === 'csv') {
+                reader.onload = (ev) => {
+                    try {
+                        const newProducts = parseCSV(ev.target.result);
+                        updateProducts(newProducts);
+                    } catch (err) {
+                        alert('Error al leer CSV: ' + err.message);
+                        resetDropZone();
+                    }
+                };
+                reader.readAsText(file);
+            } else if (fileType === 'xls' || fileType === 'xlsx') {
+                reader.onload = (ev) => {
+                    try {
+                        const data = new Uint8Array(ev.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        // Tomar la primera hoja
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        // Convertir a JSON (cabeceras en la primera fila)
+                        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                        if (rows.length < 2) throw new Error('El archivo no tiene datos');
+                        const headers = rows[0].map(h => String(h).toLowerCase().trim());
+                        const nameIdx = headers.findIndex(h => h.includes('nombre') || h === 'producto' || h === 'productos');
+                        const priceIdx = headers.findIndex(h => h.includes('precio') || h.includes('importe') || h === 'costo');
+                        if (nameIdx === -1) throw new Error('No se encontró una columna de "nombre" o "producto"');
+
+                        const newProducts = [];
+                        // Procesar filas en lotes para no bloquear (aunque 2500 no es tanto)
+                        for (let i = 1; i < rows.length; i++) {
+                            const row = rows[i];
+                            if (!row || row.length === 0) continue;
+                            const name = row[nameIdx] ? String(row[nameIdx]).trim() : '';
+                            if (!name) continue;
+                            let price = undefined;
+                            if (priceIdx !== -1 && row[priceIdx] !== undefined) {
+                                const val = row[priceIdx];
+                                // Intentar convertir a número
+                                if (typeof val === 'number') price = val;
+                                else if (typeof val === 'string') {
+                                    const num = parseFloat(val.replace(/[^\d.,-]/g, '').replace(',', '.'));
+                                    if (!isNaN(num)) price = num;
+                                }
+                            }
+                            newProducts.push({ id: generateId(), name, price });
+                        }
+                        updateProducts(newProducts);
+                    } catch (err) {
+                        alert('Error al leer Excel: ' + err.message);
+                        resetDropZone();
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                alert('Formato no soportado. Usá CSV o Excel.');
+                resetDropZone();
+            }
+        }
+
         function parseCSV(text) {
             const lines = text.split('\n').filter(l => l.trim() !== '');
             if (lines.length === 0) return [];
             const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-            const nameIdx = headers.indexOf('nombre');
-            const priceIdx = headers.indexOf('precio');
-            if (nameIdx === -1) throw new Error('El CSV debe tener una columna "nombre"');
+            const nameIdx = headers.findIndex(h => h.includes('nombre') || h === 'producto');
+            const priceIdx = headers.findIndex(h => h.includes('precio') || h.includes('importe'));
+            if (nameIdx === -1) throw new Error('El CSV debe tener una columna "nombre" o "producto"');
             const result = [];
             for (let i = 1; i < lines.length; i++) {
                 const values = lines[i].split(',').map(v => v.trim());
                 if (values.length <= nameIdx) continue;
                 const name = values[nameIdx];
                 if (!name) continue;
-                const price = priceIdx !== -1 && values[priceIdx] ? parseFloat(values[priceIdx]) : undefined;
-                result.push({ id: generateId(), name, price: isNaN(price) ? undefined : price });
+                let price = undefined;
+                if (priceIdx !== -1 && values[priceIdx]) {
+                    const num = parseFloat(values[priceIdx].replace(/[^\d.,-]/g, '').replace(',', '.'));
+                    if (!isNaN(num)) price = num;
+                }
+                result.push({ id: generateId(), name, price });
             }
             return result;
+        }
+
+        function updateProducts(newProducts) {
+            products = newProducts;
+            saveToStorage();
+            renderProductsList();
+            updateProductDatalist();
+            resetDropZone('✅ Productos cargados correctamente');
+        }
+
+        function resetDropZone(message = '📂 Arrastrá o hacé clic para seleccionar archivo (CSV o Excel)') {
+            dropZone.innerHTML = message;
         }
 
         dropZone.addEventListener('click', () => productFile.click());
@@ -602,27 +689,12 @@
             if (e.target.files[0]) handleProductFile(e.target.files[0]);
         });
 
-        function handleProductFile(file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                try {
-                    const newProducts = parseCSV(ev.target.result);
-                    products = newProducts; // reemplazar
-                    saveToStorage();
-                    renderProductsList();
-                    alert('Productos cargados correctamente');
-                } catch (err) {
-                    alert('Error al leer CSV: ' + err.message);
-                }
-            };
-            reader.readAsText(file);
-        }
-
         clearProductsBtn.addEventListener('click', () => {
             if (confirm('¿Eliminar todos los productos?')) {
                 products = [];
                 saveToStorage();
                 renderProductsList();
+                updateProductDatalist();
             }
         });
 
@@ -663,6 +735,7 @@
                     // Recargar vista activa
                     const active = document.querySelector('.nav-btn.active')?.dataset.view || 'orders';
                     setActiveView(active);
+                    updateProductDatalist();
                 } catch (err) {
                     alert('Archivo inválido: ' + err);
                 }
@@ -672,6 +745,7 @@
 
         // Inicializar vistas
         setActiveView('orders');
+
         // Datalist global para productos
         const datalist = document.createElement('datalist');
         datalist.id = 'productDatalist';
@@ -680,16 +754,8 @@
             datalist.innerHTML = products.map(p => `<option value="${p.name}">${p.price ? '$'+p.price : ''}</option>`).join('');
         }
         updateProductDatalist();
-        // Observar cambios en productos para actualizar datalist
-        const originalSave = saveToStorage;
-        saveToStorage = function() {
-            originalSave();
-            updateProductDatalist();
-        };
-        // Reemplazar para que cada guardado actualice datalist
-        window.saveToStorage = saveToStorage;
 
-        // Exponer funciones globales necesarias
+        // Exponer funciones globales necesarias (por si se necesitan en eventos)
         window.renderOrders = renderOrders;
         window.renderCustomers = renderCustomers;
         window.renderProductsList = renderProductsList;
@@ -697,9 +763,7 @@
         window.openCustomerModal = openCustomerModal;
         window.deleteOrder = deleteOrder;
         window.deleteCustomer = deleteCustomer;
-
-        // Cargar datalist inicial
-        updateProductDatalist();
+        window.updateProductDatalist = updateProductDatalist;
     })();
 </script>
 </body>
