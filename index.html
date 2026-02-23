@@ -6,7 +6,6 @@
     <title>AdminRepartos - Gestión de Repartos</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
-        /* ... estilos completos (se mantienen los mismos que en la respuesta anterior, pero bien integrados) ... */
         * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; }
         body { background: #f4f6f9; padding: 1rem; min-height: 100vh; display: flex; justify-content: center; }
         #app { max-width: 1400px; width: 100%; background: white; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden; }
@@ -26,6 +25,8 @@
         .card { background: white; border-radius: 16px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #eaeef2; margin-bottom: 2rem; }
         .flex-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1.5rem; }
         .search-box { flex: 1; min-width: 250px; padding: 0.7rem 1rem; border-radius: 30px; border: 1px solid #d0d9e2; font-size: 1rem; }
+        .filter-group { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+        .filter-group input, .filter-group select { padding: 0.5rem 1rem; border-radius: 30px; border: 1px solid #d0d9e2; font-size: 0.95rem; }
         table { width: 100%; border-collapse: collapse; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
         th, td { padding: 1rem; text-align: left; border-bottom: 1px solid #eaeef2; vertical-align: top; }
         th { background: #f8fafc; font-weight: 500; color: #2c3e50; }
@@ -52,7 +53,7 @@
         .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #1e2b3a; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; margin-right: 8px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .status-menu { position: absolute; background: white; border-radius: 16px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); padding: 0.5rem; z-index: 100; display: none; }
-        .status-menu button { display: block; width: 100%; background: none; border: none; padding: 0.5rem 1rem; text-align: left; border-radius: 30px; margin: 2px 0; }
+        .status-menu button { display: block; width: 100%; background: white; border: none; padding: 0.5rem 1rem; text-align: left; border-radius: 30px; margin: 2px 0; color: #1e2b3a; }
         .status-menu button:hover { background: #f0f3f7; }
         .image-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 2000; }
         .image-modal img { max-width: 90%; max-height: 90%; border-radius: 8px; }
@@ -62,6 +63,9 @@
         .inline-add button { width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem; padding: 0; }
         .product-list { list-style: disc; padding-left: 1.2rem; margin: 0; }
         .product-list li { margin-bottom: 0.2rem; }
+        /* Filtros de fecha */
+        .date-filter { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+        .date-filter input { padding: 0.5rem; border-radius: 30px; border: 1px solid #d0d9e2; }
     </style>
 </head>
 <body>
@@ -82,13 +86,19 @@
                     <button id="newOrderBtn" class="secondary">➕ Nuevo pedido</button>
                 </div>
                 <div class="flex-row">
-                    <input type="text" id="searchOrders" class="search-box" placeholder="🔍 Buscar por cliente o estado...">
-                    <select id="statusFilter">
-                        <option value="todos">Todos los estados</option>
-                        <option value="pendiente">Pendiente</option>
-                        <option value="entregado">Entregado</option>
-                        <option value="incompleto">Incompleto</option>
-                    </select>
+                    <input type="text" id="searchOrders" class="search-box" placeholder="🔍 Buscar (cliente, teléfono, producto...)">
+                    <div class="filter-group">
+                        <select id="statusFilter">
+                            <option value="todos">Todos los estados</option>
+                            <option value="pendiente">Pendiente</option>
+                            <option value="entregado">Entregado</option>
+                            <option value="incompleto">Incompleto</option>
+                        </select>
+                        <div class="date-filter">
+                            <input type="date" id="dateFrom" placeholder="Desde">
+                            <input type="date" id="dateTo" placeholder="Hasta">
+                        </div>
+                    </div>
                 </div>
                 <div id="ordersList"></div>
             </div>
@@ -295,6 +305,8 @@
         const newOrderBtn = document.getElementById('newOrderBtn');
         const searchOrders = document.getElementById('searchOrders');
         const statusFilter = document.getElementById('statusFilter');
+        const dateFrom = document.getElementById('dateFrom');
+        const dateTo = document.getElementById('dateTo');
         const ordersListDiv = document.getElementById('ordersList');
         const customersListDiv = document.getElementById('customersList');
         const productListDiv = document.getElementById('productList');
@@ -357,17 +369,43 @@
 
         navBtns.forEach(btn => btn.addEventListener('click', () => setActiveView(btn.dataset.view)));
 
-        // ---- Render Pedidos ----
+        // ---- Render Pedidos con filtros mejorados ----
         function renderOrders() {
             const filterText = searchOrders ? searchOrders.value.toLowerCase() : '';
             const filterStatus = statusFilter ? statusFilter.value : 'todos';
+            const fromDate = dateFrom ? dateFrom.value : '';
+            const toDate = dateTo ? dateTo.value : '';
+
             let filtered = orders.filter(order => {
-                const customer = customers.find(c => c.id === order.customerId);
-                const customerName = customer ? customer.name.toLowerCase() : '';
-                const matchesText = customerName.includes(filterText) || order.status.includes(filterText) || (order.comments && order.comments.toLowerCase().includes(filterText));
-                const matchesStatus = filterStatus === 'todos' || order.status === filterStatus;
-                return matchesText && matchesStatus;
+                // Filtro por estado
+                if (filterStatus !== 'todos' && order.status !== filterStatus) return false;
+
+                // Filtro por fecha
+                const orderDateStr = order.date.split('T')[0]; // YYYY-MM-DD
+                if (fromDate && orderDateStr < fromDate) return false;
+                if (toDate && orderDateStr > toDate) return false;
+
+                // Filtro por texto (cliente, teléfono, dirección, email, productos, comentarios)
+                if (filterText) {
+                    const customer = customers.find(c => c.id === order.customerId) || {};
+                    const customerName = (customer.name || '').toLowerCase();
+                    const customerPhone = (customer.phone || '').toLowerCase();
+                    const customerAddress = (customer.address || '').toLowerCase();
+                    const customerEmail = (customer.email || '').toLowerCase();
+                    const comments = (order.comments || '').toLowerCase();
+                    const productNames = order.items.map(i => i.productName.toLowerCase()).join(' ');
+
+                    const hayMatch = customerName.includes(filterText) ||
+                                    customerPhone.includes(filterText) ||
+                                    customerAddress.includes(filterText) ||
+                                    customerEmail.includes(filterText) ||
+                                    comments.includes(filterText) ||
+                                    productNames.includes(filterText);
+                    if (!hayMatch) return false;
+                }
+                return true;
             });
+
             if (!ordersListDiv) return;
             if (filtered.length === 0) {
                 ordersListDiv.innerHTML = '<p class="card">No hay pedidos.</p>';
@@ -713,9 +751,11 @@
         newCustomerBtn.addEventListener('click', () => openCustomerModal());
         newOrderBtn.addEventListener('click', () => openOrderModal());
 
-        // Filtros pedidos
+        // Filtros pedidos (eventos)
         searchOrders.addEventListener('input', renderOrders);
         statusFilter.addEventListener('change', renderOrders);
+        dateFrom.addEventListener('change', renderOrders);
+        dateTo.addEventListener('change', renderOrders);
 
         // ---- Productos: carga Excel/CSV (misma lógica) ----
         function handleProductFile(file) {
