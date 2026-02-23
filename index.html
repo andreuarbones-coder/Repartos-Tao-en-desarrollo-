@@ -6,6 +6,7 @@
     <title>AdminRepartos - Gestión de Repartos</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
+        /* ... estilos completos (se mantienen los mismos que en la respuesta anterior, pero bien integrados) ... */
         * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; }
         body { background: #f4f6f9; padding: 1rem; min-height: 100vh; display: flex; justify-content: center; }
         #app { max-width: 1400px; width: 100%; background: white; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden; }
@@ -50,19 +51,15 @@
         .file-upload:hover { background: #f2f6fa; }
         .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #1e2b3a; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; margin-right: 8px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        /* mini modal de estado */
         .status-menu { position: absolute; background: white; border-radius: 16px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); padding: 0.5rem; z-index: 100; display: none; }
         .status-menu button { display: block; width: 100%; background: none; border: none; padding: 0.5rem 1rem; text-align: left; border-radius: 30px; margin: 2px 0; }
         .status-menu button:hover { background: #f0f3f7; }
-        /* modal de imagen */
         .image-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 2000; }
         .image-modal img { max-width: 90%; max-height: 90%; border-radius: 8px; }
         .image-modal .close { position: absolute; top: 20px; right: 30px; font-size: 2rem; color: white; cursor: pointer; }
-        /* botón + al lado del select */
         .inline-add { display: flex; gap: 0.5rem; align-items: center; }
         .inline-add select { flex: 1; }
         .inline-add button { width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem; padding: 0; }
-        /* lista de productos en tabla */
         .product-list { list-style: disc; padding-left: 1.2rem; margin: 0; }
         .product-list li { margin-bottom: 0.2rem; }
     </style>
@@ -219,9 +216,39 @@
     <img id="modalImage" src="" alt="Foto ticket">
 </div>
 
+<!-- Modal para cliente normal (editar/agregar) -->
+<div id="customerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
+    <div style="background:white; border-radius:30px; width:90%; max-width:500px; padding:2rem;">
+        <h3 id="customerModalTitle">👤 Nuevo Cliente</h3>
+        <form id="customerForm">
+            <input type="hidden" id="customerId">
+            <div class="form-group">
+                <label>Nombre *</label>
+                <input type="text" id="customerName" required>
+            </div>
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input type="text" id="customerPhone">
+            </div>
+            <div class="form-group">
+                <label>Dirección</label>
+                <input type="text" id="customerAddress">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="customerEmail">
+            </div>
+            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
+                <button type="button" id="cancelCustomerBtn" class="secondary">Cancelar</button>
+                <button type="submit" id="saveCustomerBtn">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
     (function() {
-        // --- Estado inicial y claves de localStorage ---
+        // --- Estado y localStorage ---
         const STORAGE_KEYS = {
             CUSTOMERS: 'repartos_customers',
             PRODUCTS: 'repartos_products',
@@ -238,8 +265,8 @@
             { id: 'p3', name: 'Aceite 1.5L', price: 350 }
         ];
         let orders = [
-            { id: 'o1', customerId: 'c1', date: '2025-03-15T10:30', status: 'pendiente', comments: 'Llamar antes de llegar', items: [{ productId: 'p1', productName: 'Arroz 1kg', quantity: 2, price: 120 }], ticketPhoto: '' },
-            { id: 'o2', customerId: 'c2', date: '2025-03-16T15:45', status: 'entregado', comments: 'Dejar con el portero', items: [{ productId: 'p2', productName: 'Fideos 500g', quantity: 3, price: 90 }], ticketPhoto: '' }
+            { id: 'o1', customerId: 'c1', date: '2025-03-15T10:30', status: 'pendiente', comments: 'Llamar antes de llegar', items: [{ productId: null, productName: 'Arroz 1kg', quantity: 2, price: 120 }], ticketPhoto: '' },
+            { id: 'o2', customerId: 'c2', date: '2025-03-16T15:45', status: 'entregado', comments: 'Dejar con el portero', items: [{ productId: null, productName: 'Fideos 500g', quantity: 3, price: 90 }], ticketPhoto: '' }
         ];
 
         function loadFromStorage() {
@@ -250,7 +277,7 @@
                 if (storedProducts) products = JSON.parse(storedProducts);
                 const storedOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
                 if (storedOrders) orders = JSON.parse(storedOrders);
-            } catch (e) {}
+            } catch (e) { console.warn('Error loading', e); }
         }
         loadFromStorage();
 
@@ -262,7 +289,7 @@
 
         function generateId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 9); }
 
-        // ----- Referencias a elementos DOM -----
+        // ----- Referencias DOM -----
         const viewsContainer = document.getElementById('viewsContainer');
         const navBtns = document.querySelectorAll('.nav-btn');
         const newOrderBtn = document.getElementById('newOrderBtn');
@@ -278,19 +305,23 @@
         const exportBackupBtn = document.getElementById('exportBackup');
         const importZone = document.getElementById('importZone');
         const importFile = document.getElementById('importFile');
-        const quickAddCustomerBtn = document.getElementById('quickAddCustomerBtn');
+
+        // Modales
+        const orderModal = document.getElementById('orderModal');
         const quickCustomerModal = document.getElementById('quickCustomerModal');
+        const customerModal = document.getElementById('customerModal');
+        const imageModal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+
+        // Elementos dentro de modales
+        const quickAddCustomerBtn = document.getElementById('quickAddCustomerBtn');
         const quickCustomerForm = document.getElementById('quickCustomerForm');
         const cancelQuickBtn = document.getElementById('cancelQuickBtn');
         const quickName = document.getElementById('quickName');
         const quickPhone = document.getElementById('quickPhone');
         const quickAddress = document.getElementById('quickAddress');
         const quickEmail = document.getElementById('quickEmail');
-        const imageModal = document.getElementById('imageModal');
-        const modalImage = document.getElementById('modalImage');
 
-        // Modales principales
-        const orderModal = document.getElementById('orderModal');
         const orderForm = document.getElementById('orderForm');
         const cancelOrderBtn = document.getElementById('cancelOrderBtn');
         const addProductBtn = document.getElementById('addProductBtn');
@@ -304,7 +335,16 @@
         const orderIdHidden = document.getElementById('orderId');
         const modalTitle = document.getElementById('modalTitle');
 
-        // ---- Navegación ----
+        const customerForm = document.getElementById('customerForm');
+        const cancelCustomerBtn = document.getElementById('cancelCustomerBtn');
+        const customerIdHidden = document.getElementById('customerId');
+        const customerName = document.getElementById('customerName');
+        const customerPhone = document.getElementById('customerPhone');
+        const customerAddress = document.getElementById('customerAddress');
+        const customerEmail = document.getElementById('customerEmail');
+        const customerModalTitle = document.getElementById('customerModalTitle');
+
+        // ---- Utilidades de vista ----
         function setActiveView(viewId) {
             document.querySelectorAll('.views-container > div').forEach(div => div.classList.remove('active-view'));
             document.getElementById(`view-${viewId}`).classList.add('active-view');
@@ -314,9 +354,10 @@
             if (viewId === 'customers') renderCustomers();
             if (viewId === 'products') renderProductsList();
         }
+
         navBtns.forEach(btn => btn.addEventListener('click', () => setActiveView(btn.dataset.view)));
 
-        // ---- Renderizado de Pedidos (con estados cliqueables y productos en lista) ----
+        // ---- Render Pedidos ----
         function renderOrders() {
             const filterText = searchOrders ? searchOrders.value.toLowerCase() : '';
             const filterStatus = statusFilter ? statusFilter.value : 'todos';
@@ -335,10 +376,9 @@
             let html = '<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Estado</th><th>Productos</th><th>Comentarios</th><th>Acciones</th></tr></thead><tbody>';
             filtered.forEach(order => {
                 const customer = customers.find(c => c.id === order.customerId) || { name: '?' };
-                // Productos como lista
                 const itemsList = order.items.map(i => `<li>${i.productName} x${i.quantity} ($${i.price})</li>`).join('');
                 const itemsHtml = `<ul class="product-list">${itemsList}</ul>`;
-                html += `<tr>
+                html += `<tr data-order-id="${order.id}">
                     <td>${new Date(order.date).toLocaleString()}</td>
                     <td>${customer.name}</td>
                     <td>
@@ -361,14 +401,21 @@
             html += '</tbody></table>';
             ordersListDiv.innerHTML = html;
 
-            // Eventos para editar/eliminar
-            document.querySelectorAll('.edit-order').forEach(btn => btn.addEventListener('click', (e) => openOrderModal(e.target.dataset.id)));
-            document.querySelectorAll('.delete-order').forEach(btn => btn.addEventListener('click', (e) => deleteOrder(e.target.dataset.id)));
+            // Eventos editar/eliminar
+            document.querySelectorAll('.edit-order').forEach(btn => btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openOrderModal(btn.dataset.id);
+            }));
+            document.querySelectorAll('.delete-order').forEach(btn => btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteOrder(btn.dataset.id);
+            }));
 
-            // Eventos para ver foto
+            // Eventos ver foto
             document.querySelectorAll('.view-photo').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    const photo = e.target.dataset.photo;
+                    e.stopPropagation();
+                    const photo = btn.dataset.photo;
                     if (photo) {
                         modalImage.src = photo;
                         imageModal.style.display = 'flex';
@@ -376,15 +423,13 @@
                 });
             });
 
-            // Eventos para cambiar estado (badge click)
+            // Eventos cambio de estado
             document.querySelectorAll('.badge').forEach(badge => {
                 badge.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const orderId = badge.dataset.orderId;
                     const menu = document.getElementById(`status-menu-${orderId}`);
-                    // Ocultar otros menús
                     document.querySelectorAll('.status-menu').forEach(m => m.style.display = 'none');
-                    // Posicionar el menú cerca del badge
                     const rect = badge.getBoundingClientRect();
                     menu.style.position = 'absolute';
                     menu.style.top = rect.bottom + window.scrollY + 'px';
@@ -393,23 +438,23 @@
                 });
             });
 
-            // Eventos para opciones del menú de estado
             document.querySelectorAll('.status-menu button').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const orderId = btn.closest('.status-menu').id.replace('status-menu-', '');
+                    const menu = btn.closest('.status-menu');
+                    const orderId = menu.id.replace('status-menu-', '');
                     const newStatus = btn.dataset.status;
                     const order = orders.find(o => o.id === orderId);
                     if (order) {
                         order.status = newStatus;
                         saveToStorage();
-                        renderOrders(); // refrescar
+                        renderOrders();
                     }
-                    document.querySelectorAll('.status-menu').forEach(m => m.style.display = 'none');
+                    menu.style.display = 'none';
                 });
             });
 
-            // Cerrar menú al hacer clic fuera
+            // Cerrar menús al hacer clic fuera
             document.addEventListener('click', () => {
                 document.querySelectorAll('.status-menu').forEach(m => m.style.display = 'none');
             });
@@ -445,8 +490,14 @@
             });
             html += '</tbody></table>';
             customersListDiv.innerHTML = html;
-            document.querySelectorAll('.edit-customer').forEach(btn => btn.addEventListener('click', (e) => openCustomerModal(e.target.dataset.id)));
-            document.querySelectorAll('.delete-customer').forEach(btn => btn.addEventListener('click', (e) => deleteCustomer(e.target.dataset.id)));
+            document.querySelectorAll('.edit-customer').forEach(btn => btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openCustomerModal(btn.dataset.id);
+            }));
+            document.querySelectorAll('.delete-customer').forEach(btn => btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteCustomer(btn.dataset.id);
+            }));
         }
 
         function deleteCustomer(id) {
@@ -458,6 +509,7 @@
                 customers = customers.filter(c => c.id !== id);
                 saveToStorage();
                 renderCustomers();
+                updateCustomerSelect(); // actualizar selector en pedidos
             }
         }
 
@@ -469,7 +521,7 @@
                 return;
             }
             let html = '<table><thead><tr><th>Nombre</th><th>Precio</th></tr></thead><tbody>';
-            products.slice(0, 100).forEach(p => { // mostramos primeros 100 para no saturar
+            products.slice(0, 100).forEach(p => {
                 html += `<tr><td>${p.name}</td><td>${p.price ? '$' + p.price : '-'}</td></tr>`;
             });
             if (products.length > 100) html += '<tr><td colspan="2">... y ' + (products.length-100) + ' más</td></tr>';
@@ -477,7 +529,7 @@
             productListDiv.innerHTML = html;
         }
 
-        // ---- Modal de Pedido ----
+        // ---- Modal Pedido ----
         function openOrderModal(orderId = null) {
             const isEdit = !!orderId;
             modalTitle.innerText = isEdit ? '✏️ Editar Pedido' : '➕ Nuevo Pedido';
@@ -485,7 +537,6 @@
             orderIdHidden.value = '';
             productsContainer.innerHTML = '';
             photoPreviewContainer.innerHTML = '';
-            // Cargar clientes en select
             updateCustomerSelect();
             if (isEdit) {
                 const order = orders.find(o => o.id === orderId);
@@ -533,6 +584,8 @@
         window.addEventListener('click', (e) => {
             if (e.target === orderModal) orderModal.style.display = 'none';
             if (e.target === quickCustomerModal) quickCustomerModal.style.display = 'none';
+            if (e.target === customerModal) customerModal.style.display = 'none';
+            if (e.target === imageModal) imageModal.style.display = 'none';
         });
 
         orderForm.addEventListener('submit', (e) => {
@@ -592,7 +645,7 @@
 
         addProductBtn.addEventListener('click', () => addProductRow());
 
-        // ---- Cliente rápido en pedido ----
+        // ---- Cliente rápido ----
         quickAddCustomerBtn.addEventListener('click', () => {
             quickCustomerForm.reset();
             quickCustomerModal.style.display = 'flex';
@@ -613,21 +666,11 @@
             customers.push(newCust);
             saveToStorage();
             updateCustomerSelect();
-            customerSelect.value = newCust.id; // seleccionar el nuevo
+            customerSelect.value = newCust.id;
             quickCustomerModal.style.display = 'none';
         });
 
-        // ---- Modal Cliente normal (editar/agregar desde vista clientes) ----
-        const customerModal = document.getElementById('customerModal');
-        const customerForm = document.getElementById('customerForm');
-        const cancelCustomerBtn = document.getElementById('cancelCustomerBtn');
-        const customerIdHidden = document.getElementById('customerId');
-        const customerName = document.getElementById('customerName');
-        const customerPhone = document.getElementById('customerPhone');
-        const customerAddress = document.getElementById('customerAddress');
-        const customerEmail = document.getElementById('customerEmail');
-        const customerModalTitle = document.getElementById('customerModalTitle');
-
+        // ---- Cliente normal ----
         function openCustomerModal(id = null) {
             customerModalTitle.innerText = id ? '✏️ Editar Cliente' : '👤 Nuevo Cliente';
             customerForm.reset();
@@ -663,18 +706,18 @@
             saveToStorage();
             customerModal.style.display = 'none';
             renderCustomers();
-            updateCustomerSelect(); // para que aparezca en selector de pedidos
+            updateCustomerSelect();
         });
 
         cancelCustomerBtn.addEventListener('click', () => customerModal.style.display = 'none');
         newCustomerBtn.addEventListener('click', () => openCustomerModal());
         newOrderBtn.addEventListener('click', () => openOrderModal());
 
-        // Filtros de pedidos
-        if (searchOrders) searchOrders.addEventListener('input', renderOrders);
-        if (statusFilter) statusFilter.addEventListener('change', renderOrders);
+        // Filtros pedidos
+        searchOrders.addEventListener('input', renderOrders);
+        statusFilter.addEventListener('change', renderOrders);
 
-        // ---- Productos: carga CSV o Excel (igual que antes) ----
+        // ---- Productos: carga Excel/CSV (misma lógica) ----
         function handleProductFile(file) {
             const reader = new FileReader();
             const fileType = file.name.split('.').pop().toLowerCase();
@@ -833,10 +876,7 @@
             reader.readAsText(file);
         }
 
-        // ---- Inicialización ----
-        setActiveView('orders');
-
-        // Datalist para productos
+        // ---- Datalist de productos ----
         const datalist = document.createElement('datalist');
         datalist.id = 'productDatalist';
         document.body.appendChild(datalist);
@@ -845,42 +885,12 @@
         }
         updateProductDatalist();
 
-        // Cerrar modal de imagen al hacer clic en la X o fuera
-        imageModal.querySelector('.close').addEventListener('click', () => imageModal.style.display = 'none');
-        window.addEventListener('click', (e) => {
-            if (e.target === imageModal) imageModal.style.display = 'none';
-        });
+        // ---- Cerrar modal de imagen ----
+        document.querySelector('#imageModal .close').addEventListener('click', () => imageModal.style.display = 'none');
+
+        // ---- Inicializar vista ----
+        setActiveView('orders');
     })();
 </script>
-
-<!-- Modal cliente normal (oculto) -->
-<div id="customerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
-    <div style="background:white; border-radius:30px; width:90%; max-width:500px; padding:2rem;">
-        <h3 id="customerModalTitle">👤 Nuevo Cliente</h3>
-        <form id="customerForm">
-            <input type="hidden" id="customerId">
-            <div class="form-group">
-                <label>Nombre *</label>
-                <input type="text" id="customerName" required>
-            </div>
-            <div class="form-group">
-                <label>Teléfono</label>
-                <input type="text" id="customerPhone">
-            </div>
-            <div class="form-group">
-                <label>Dirección</label>
-                <input type="text" id="customerAddress">
-            </div>
-            <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="customerEmail">
-            </div>
-            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
-                <button type="button" id="cancelCustomerBtn" class="secondary">Cancelar</button>
-                <button type="submit" id="saveCustomerBtn">Guardar</button>
-            </div>
-        </form>
-    </div>
-</div>
 </body>
 </html>
