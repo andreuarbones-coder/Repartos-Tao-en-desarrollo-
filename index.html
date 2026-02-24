@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AdminRepartos Pro</title>
+    <title>AdminRepartos - Gestión de Repartos</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
-        /* (Estilos mejorados - mismos que antes pero con algunos retoques) */
         * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; }
         body { background: #f4f6f9; padding: 1rem; min-height: 100vh; display: flex; justify-content: center; }
         #app { max-width: 1400px; width: 100%; background: white; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden; }
@@ -41,7 +40,7 @@
         .icon-btn { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; padding: 0.2rem 0.5rem; border-radius: 8px; line-height: 1; }
         .icon-btn:hover { background: #e9ecef; }
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
-        .form-group { margin-bottom: 1rem; }
+        .form-group { margin-bottom: 1rem; position: relative; }
         .form-group label { display: block; margin-bottom: 0.3rem; font-weight: 500; color: #2c3e50; }
         .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.7rem 1rem; border-radius: 30px; border: 1px solid #d0d9e2; font-size: 1rem; }
         .form-group textarea { border-radius: 16px; resize: vertical; min-height: 80px; }
@@ -64,859 +63,549 @@
         .inline-add button { width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem; padding: 0; }
         .product-list { list-style: disc; padding-left: 1.2rem; margin: 0; }
         .product-list li { margin-bottom: 0.2rem; }
+        /* Filtros de fecha */
         .date-filter { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
         .date-filter input { padding: 0.5rem; border-radius: 30px; border: 1px solid #d0d9e2; }
-        .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 3000; }
-        .toast { background: #1e2b3a; color: white; padding: 0.8rem 1.5rem; border-radius: 30px; margin-top: 0.5rem; box-shadow: 0 3px 10px rgba(0,0,0,0.2); animation: slideIn 0.3s; }
-        .toast.error { background: #dc3545; }
-        .toast.success { background: #28a745; }
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        .pagination { display: flex; gap: 0.5rem; justify-content: center; margin-top: 1rem; }
-        .pagination button { background: white; color: #1e2b3a; border: 1px solid #d0d9e2; padding: 0.3rem 0.8rem; }
-        .pagination button.active { background: #1e2b3a; color: white; }
     </style>
 </head>
 <body>
-<div id="app"></div>
-
-<!-- Templates para modales (se inyectan con JS) -->
-<script type="module">
-    // --- Módulo de almacenamiento ---
-    class Store {
-        static KEYS = {
-            CUSTOMERS: 'repartos_customers',
-            PRODUCTS: 'repartos_products',
-            ORDERS: 'repartos_orders'
-        };
-
-        static load() {
-            try {
-                return {
-                    customers: JSON.parse(localStorage.getItem(this.KEYS.CUSTOMERS)) || [],
-                    products: JSON.parse(localStorage.getItem(this.KEYS.PRODUCTS)) || [],
-                    orders: JSON.parse(localStorage.getItem(this.KEYS.ORDERS)) || []
-                };
-            } catch {
-                return { customers: [], products: [], orders: [] };
-            }
-        }
-
-        static save(data) {
-            localStorage.setItem(this.KEYS.CUSTOMERS, JSON.stringify(data.customers));
-            localStorage.setItem(this.KEYS.PRODUCTS, JSON.stringify(data.products));
-            localStorage.setItem(this.KEYS.ORDERS, JSON.stringify(data.orders));
-        }
-    }
-
-    // --- Módulo de notificaciones ---
-    class Toast {
-        constructor() {
-            this.container = document.createElement('div');
-            this.container.className = 'toast-container';
-            document.body.appendChild(this.container);
-        }
-        show(message, type = 'info') {
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.textContent = message;
-            this.container.appendChild(toast);
-            setTimeout(() => toast.remove(), 3000);
-        }
-    }
-
-    // --- Módulo de utilidades ---
-    const Utils = {
-        generateId: () => Date.now() + '-' + Math.random().toString(36).substr(2, 9),
-        formatDate: (iso) => iso ? new Date(iso).toLocaleString() : '',
-        compressImage: (file, maxSizeKB = 500) => {
-            return new Promise((resolve) => {
-                if (!file) return resolve('');
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        let width = img.width;
-                        let height = img.height;
-                        // Reducir tamaño si es muy grande
-                        const maxDimension = 1024;
-                        if (width > maxDimension || height > maxDimension) {
-                            if (width > height) {
-                                height = (height / width) * maxDimension;
-                                width = maxDimension;
-                            } else {
-                                width = (width / height) * maxDimension;
-                                height = maxDimension;
-                            }
-                        }
-                        canvas.width = width;
-                        canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
-                        // Comprimir calidad hasta que sea menor a maxSizeKB
-                        let quality = 0.9;
-                        let compressed = canvas.toDataURL('image/jpeg', quality);
-                        while (compressed.length > maxSizeKB * 1024 && quality > 0.1) {
-                            quality -= 0.1;
-                            compressed = canvas.toDataURL('image/jpeg', quality);
-                        }
-                        resolve(compressed);
-                    };
-                    img.src = e.target.result;
-                };
-                reader.readAsDataURL(file);
-            });
-        },
-        debounce: (fn, delay) => {
-            let timer;
-            return (...args) => {
-                clearTimeout(timer);
-                timer = setTimeout(() => fn(...args), delay);
-            };
-        }
-    };
-
-    // --- Clase principal App ---
-    class App {
-        constructor() {
-            this.data = Store.load();
-            this.toast = new Toast();
-            this.currentView = 'orders';
-            this.filters = {
-                orders: { search: '', status: 'todos', from: '', to: '' },
-                customers: { search: '' },
-                products: { search: '' }
-            };
-            this.pagination = {
-                orders: { page: 1, pageSize: 20 },
-                customers: { page: 1, pageSize: 20 },
-                products: { page: 1, pageSize: 20 }
-            };
-            this.initDOM();
-            this.attachEvents();
-            this.render();
-        }
-
-        initDOM() {
-            // Estructura base
-            document.getElementById('app').innerHTML = `
-                <header>
-                    <h1>📦 AdminRepartos Pro</h1>
-                    <button class="nav-btn" data-view="orders">📋 Pedidos</button>
-                    <button class="nav-btn" data-view="customers">👥 Clientes</button>
-                    <button class="nav-btn" data-view="products">📦 Productos</button>
-                    <button class="nav-btn" data-view="backup">💾 Backup</button>
-                </header>
-                <main>
-                    <div class="views-container" id="viewsContainer"></div>
-                </main>
-            `;
-            this.viewsContainer = document.getElementById('viewsContainer');
-            this.renderViews();
-        }
-
-        renderViews() {
-            this.viewsContainer.innerHTML = `
-                <div id="view-orders" class="active-view"></div>
-                <div id="view-customers"></div>
-                <div id="view-products"></div>
-                <div id="view-backup"></div>
-            `;
-        }
-
-        attachEvents() {
-            // Navegación
-            document.querySelectorAll('.nav-btn').forEach(btn =>
-                btn.addEventListener('click', () => this.setView(btn.dataset.view))
-            );
-
-            // Delegación de eventos global
-            document.addEventListener('click', (e) => {
-                const target = e.target;
-                // Botones dentro de tablas
-                if (target.matches('.edit-order')) this.openOrderModal(target.dataset.id);
-                if (target.matches('.delete-order')) this.deleteOrder(target.dataset.id);
-                if (target.matches('.view-photo')) this.showImage(target.dataset.photo);
-                if (target.matches('.edit-customer')) this.openCustomerModal(target.dataset.id);
-                if (target.matches('.delete-customer')) this.deleteCustomer(target.dataset.id);
-                if (target.matches('.edit-product')) this.openProductModal(target.dataset.id);
-                if (target.matches('.delete-product')) this.deleteProduct(target.dataset.id);
-                if (target.matches('.badge')) this.showStatusMenu(target);
-                if (target.matches('.status-menu button')) this.changeStatus(target);
-                if (target.matches('.pagination button')) this.changePage(target);
-            });
-
-            // Cerrar menús al hacer clic fuera
-            document.addEventListener('click', (e) => {
-                if (!e.target.matches('.badge') && !e.target.closest('.status-menu')) {
-                    document.querySelectorAll('.status-menu').forEach(m => m.style.display = 'none');
-                }
-            });
-
-            // Filtros (debounced)
-            const handleSearch = Utils.debounce((view, value) => {
-                this.filters[view].search = value;
-                this.pagination[view].page = 1;
-                this.renderView(view);
-            }, 300);
-
-            // Delegación para inputs de filtro
-            document.addEventListener('input', (e) => {
-                if (e.target.matches('#searchOrders')) handleSearch('orders', e.target.value);
-                if (e.target.matches('#searchCustomers')) handleSearch('customers', e.target.value);
-                if (e.target.matches('#searchProducts')) handleSearch('products', e.target.value);
-                if (e.target.matches('#statusFilter')) {
-                    this.filters.orders.status = e.target.value;
-                    this.renderView('orders');
-                }
-                if (e.target.matches('#dateFrom') || e.target.matches('#dateTo')) {
-                    this.filters.orders.from = document.getElementById('dateFrom')?.value || '';
-                    this.filters.orders.to = document.getElementById('dateTo')?.value || '';
-                    this.renderView('orders');
-                }
-            });
-
-            // Modales
-            document.getElementById('newOrderBtn')?.addEventListener('click', () => this.openOrderModal());
-            document.getElementById('newCustomerBtn')?.addEventListener('click', () => this.openCustomerModal());
-            document.getElementById('newProductBtn')?.addEventListener('click', () => this.openProductModal());
-            document.getElementById('cancelOrderBtn')?.addEventListener('click', () => this.closeModal('orderModal'));
-            document.getElementById('cancelCustomerBtn')?.addEventListener('click', () => this.closeModal('customerModal'));
-            document.getElementById('cancelProductBtn')?.addEventListener('click', () => this.closeModal('productModal'));
-            document.getElementById('quickAddCustomerBtn')?.addEventListener('click', () => this.openQuickCustomerModal());
-            document.getElementById('cancelQuickBtn')?.addEventListener('click', () => this.closeModal('quickCustomerModal'));
-            document.getElementById('addProductBtn')?.addEventListener('click', () => this.addProductRow());
-
-            // Formularios
-            document.getElementById('orderForm')?.addEventListener('submit', (e) => this.saveOrder(e));
-            document.getElementById('customerForm')?.addEventListener('submit', (e) => this.saveCustomer(e));
-            document.getElementById('productForm')?.addEventListener('submit', (e) => this.saveProduct(e));
-            document.getElementById('quickCustomerForm')?.addEventListener('submit', (e) => this.saveQuickCustomer(e));
-
-            // Archivos
-            document.getElementById('productFile')?.addEventListener('change', (e) => this.handleProductFile(e.target.files[0]));
-            document.getElementById('importFile')?.addEventListener('change', (e) => this.handleImport(e.target.files[0]));
-            document.getElementById('dropZone')?.addEventListener('click', () => document.getElementById('productFile').click());
-            document.getElementById('importZone')?.addEventListener('click', () => document.getElementById('importFile').click());
-            document.getElementById('dropZone')?.addEventListener('dragover', (e) => e.preventDefault());
-            document.getElementById('dropZone')?.addEventListener('drop', (e) => {
-                e.preventDefault();
-                this.handleProductFile(e.dataTransfer.files[0]);
-            });
-            document.getElementById('importZone')?.addEventListener('dragover', (e) => e.preventDefault());
-            document.getElementById('importZone')?.addEventListener('drop', (e) => {
-                e.preventDefault();
-                this.handleImport(e.dataTransfer.files[0]);
-            });
-
-            document.getElementById('clearProducts')?.addEventListener('click', () => this.clearProducts());
-            document.getElementById('exportBackup')?.addEventListener('click', () => this.exportBackup());
-
-            // Foto ticket
-            document.getElementById('ticketPhoto')?.addEventListener('change', async (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const compressed = await Utils.compressImage(file);
-                    document.getElementById('photoPreviewContainer').innerHTML = `<img src="${compressed}" class="photo-preview">`;
-                }
-            });
-
-            // Cerrar modales con tecla Escape
-            window.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
-                }
-            });
-        }
-
-        setView(view) {
-            this.currentView = view;
-            document.querySelectorAll('.views-container > div').forEach(div => div.classList.remove('active-view'));
-            document.getElementById(`view-${view}`).classList.add('active-view');
-            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelector(`.nav-btn[data-view="${view}"]`).classList.add('active');
-            this.renderView(view);
-        }
-
-        renderView(view) {
-            if (view === 'orders') this.renderOrders();
-            if (view === 'customers') this.renderCustomers();
-            if (view === 'products') this.renderProducts();
-            if (view === 'backup') this.renderBackup();
-        }
-
-        render() {
-            this.renderView(this.currentView);
-        }
-
-        // --- VISTA PEDIDOS ---
-        renderOrders() {
-            const container = document.getElementById('view-orders');
-            const filter = this.filters.orders;
-            const pag = this.pagination.orders;
-
-            let filtered = this.data.orders.filter(order => {
-                if (filter.status !== 'todos' && order.status !== filter.status) return false;
-                const orderDate = order.date?.split('T')[0] || '';
-                if (filter.from && orderDate < filter.from) return false;
-                if (filter.to && orderDate > filter.to) return false;
-                if (filter.search) {
-                    const customer = this.data.customers.find(c => c.id === order.customerId) || {};
-                    const text = (customer.name + ' ' + (customer.phone || '') + ' ' + (customer.address || '') + ' ' + (order.comments || '') + ' ' + order.items.map(i => i.productName).join(' ')).toLowerCase();
-                    return text.includes(filter.search.toLowerCase());
-                }
-                return true;
-            });
-
-            const totalPages = Math.ceil(filtered.length / pag.pageSize);
-            const start = (pag.page - 1) * pag.pageSize;
-            const pageItems = filtered.slice(start, start + pag.pageSize);
-
-            let html = `
+<div id="app">
+    <header>
+        <h1>📦 AdminRepartos</h1>
+        <button class="nav-btn" data-view="orders">📋 Pedidos</button>
+        <button class="nav-btn" data-view="customers">👥 Clientes</button>
+        <button class="nav-btn" data-view="products">📦 Productos</button>
+        <button class="nav-btn" data-view="backup">💾 Backup</button>
+    </header>
+    <main>
+        <div class="views-container" id="viewsContainer">
+            <!-- Pedidos -->
+            <div id="view-orders" class="active-view">
                 <div class="flex-row">
                     <h2>📋 Lista de Pedidos</h2>
                     <button id="newOrderBtn" class="secondary">➕ Nuevo pedido</button>
                 </div>
                 <div class="flex-row">
-                    <input type="text" id="searchOrders" class="search-box" placeholder="🔍 Buscar..." value="${filter.search}">
+                    <input type="text" id="searchOrders" class="search-box" placeholder="🔍 Buscar (cliente, teléfono, producto...)">
                     <div class="filter-group">
                         <select id="statusFilter">
-                            <option value="todos" ${filter.status === 'todos' ? 'selected' : ''}>Todos</option>
-                            <option value="pendiente" ${filter.status === 'pendiente' ? 'selected' : ''}>Pendiente</option>
-                            <option value="entregado" ${filter.status === 'entregado' ? 'selected' : ''}>Entregado</option>
-                            <option value="incompleto" ${filter.status === 'incompleto' ? 'selected' : ''}>Incompleto</option>
+                            <option value="todos">Todos los estados</option>
+                            <option value="pendiente">Pendiente</option>
+                            <option value="entregado">Entregado</option>
+                            <option value="incompleto">Incompleto</option>
                         </select>
                         <div class="date-filter">
-                            <input type="date" id="dateFrom" value="${filter.from}">
-                            <input type="date" id="dateTo" value="${filter.to}">
+                            <input type="date" id="dateFrom" placeholder="Desde">
+                            <input type="date" id="dateTo" placeholder="Hasta">
                         </div>
                     </div>
                 </div>
-            `;
-
-            if (pageItems.length === 0) {
-                html += '<p class="card">No hay pedidos.</p>';
-            } else {
-                html += '<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Estado</th><th>Productos</th><th>Comentarios</th><th>Acciones</th></tr></thead><tbody>';
-                pageItems.forEach(order => {
-                    const customer = this.data.customers.find(c => c.id === order.customerId) || { name: '?' };
-                    const itemsList = order.items.map(i => `<li>${i.productName} x${i.quantity} ($${i.price})</li>`).join('');
-                    html += `<tr data-order-id="${order.id}">
-                        <td>${Utils.formatDate(order.date)}</td>
-                        <td>${customer.name}</td>
-                        <td>
-                            <span class="badge ${order.status}" data-order-id="${order.id}">${order.status}</span>
-                            <div class="status-menu" id="status-menu-${order.id}">
-                                <button data-status="pendiente">Pendiente</button>
-                                <button data-status="entregado">Entregado</button>
-                                <button data-status="incompleto">Incompleto</button>
-                            </div>
-                        </td>
-                        <td><ul class="product-list">${itemsList}</ul></td>
-                        <td>${order.comments || ''}</td>
-                        <td class="actions-cell">
-                            <button class="icon-btn edit-order" data-id="${order.id}">✏️</button>
-                            <button class="icon-btn delete-order" data-id="${order.id}">🗑️</button>
-                            ${order.ticketPhoto ? `<button class="icon-btn view-photo" data-photo="${order.ticketPhoto}">📷</button>` : ''}
-                        </td>
-                    </tr>`;
-                });
-                html += '</tbody></table>';
-                html += this.renderPagination('orders', totalPages, pag.page);
-            }
-            container.innerHTML = html;
-        }
-
-        // --- VISTA CLIENTES ---
-        renderCustomers() {
-            const container = document.getElementById('view-customers');
-            const filter = this.filters.customers;
-            const pag = this.pagination.customers;
-
-            let filtered = this.data.customers.filter(c => {
-                if (!filter.search) return true;
-                const text = (c.name + ' ' + (c.phone || '') + ' ' + (c.address || '') + ' ' + (c.email || '')).toLowerCase();
-                return text.includes(filter.search.toLowerCase());
-            });
-
-            const totalPages = Math.ceil(filtered.length / pag.pageSize);
-            const start = (pag.page - 1) * pag.pageSize;
-            const pageItems = filtered.slice(start, start + pag.pageSize);
-
-            let html = `
+                <div id="ordersList"></div>
+            </div>
+            <!-- Clientes -->
+            <div id="view-customers">
                 <div class="flex-row">
                     <h2>👥 Clientes</h2>
                     <button id="newCustomerBtn" class="secondary">➕ Nuevo cliente</button>
                 </div>
-                <div class="flex-row">
-                    <input type="text" id="searchCustomers" class="search-box" placeholder="🔍 Buscar cliente..." value="${filter.search}">
-                </div>
-            `;
-
-            if (pageItems.length === 0) {
-                html += '<p class="card">No hay clientes.</p>';
-            } else {
-                html += '<table><thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Email</th><th>Acciones</th></tr></thead><tbody>';
-                pageItems.forEach(c => {
-                    html += `<tr>
-                        <td>${c.name}</td>
-                        <td>${c.phone || ''}</td>
-                        <td>${c.address || ''}</td>
-                        <td>${c.email || ''}</td>
-                        <td class="actions-cell">
-                            <button class="icon-btn edit-customer" data-id="${c.id}">✏️</button>
-                            <button class="icon-btn delete-customer" data-id="${c.id}">🗑️</button>
-                        </td>
-                    </tr>`;
-                });
-                html += '</tbody></table>';
-                html += this.renderPagination('customers', totalPages, pag.page);
-            }
-            container.innerHTML = html;
-        }
-
-        // --- VISTA PRODUCTOS ---
-        renderProducts() {
-            const container = document.getElementById('view-products');
-            const filter = this.filters.products;
-            const pag = this.pagination.products;
-
-            let filtered = this.data.products.filter(p => {
-                if (!filter.search) return true;
-                return p.name.toLowerCase().includes(filter.search.toLowerCase());
-            });
-
-            const totalPages = Math.ceil(filtered.length / pag.pageSize);
-            const start = (pag.page - 1) * pag.pageSize;
-            const pageItems = filtered.slice(start, start + pag.pageSize);
-
-            let html = `
-                <div class="flex-row">
-                    <h2>📦 Productos</h2>
-                    <button id="newProductBtn" class="secondary">➕ Nuevo producto</button>
-                </div>
-                <div class="flex-row">
-                    <input type="text" id="searchProducts" class="search-box" placeholder="🔍 Buscar producto..." value="${filter.search}">
-                </div>
+                <div id="customersList"></div>
+            </div>
+            <!-- Productos -->
+            <div id="view-products">
+                <h2>📦 Productos (para autocompletado)</h2>
                 <div class="card">
-                    <p style="margin-bottom:1rem">Subí un archivo CSV o Excel para cargar productos.</p>
+                    <p style="margin-bottom:1rem">Subí un archivo CSV (columna "nombre") o Excel (XLSX, XLS) para cargar productos.</p>
                     <div class="file-upload" id="dropZone">
-                        📂 Arrastrá o hacé clic para seleccionar archivo
-                        <input type="file" id="productFile" accept=".csv, .xls, .xlsx" style="display: none;">
+                        📂 Arrastrá o hacé clic para seleccionar archivo (CSV o Excel)
+                        <input type="file" id="productFile" accept=".csv, text/csv, .xls, .xlsx, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display: none;">
                     </div>
-                    <div style="margin-top:1rem">
-                        <button id="clearProducts" class="secondary">🗑️ Limpiar todos</button>
-                    </div>
+                    <div id="productList" style="margin-top:2rem"></div>
+                    <button id="clearProducts" class="secondary" style="margin-top:1rem">🗑️ Limpiar productos</button>
                 </div>
-            `;
-
-            if (pageItems.length === 0) {
-                html += '<p class="card">No hay productos cargados.</p>';
-            } else {
-                html += '<table><thead><tr><th>Nombre</th><th>Precio</th><th>Acciones</th></tr></thead><tbody>';
-                pageItems.forEach(p => {
-                    html += `<tr>
-                        <td>${p.name}</td>
-                        <td>${p.price ? '$' + p.price : '-'}</td>
-                        <td class="actions-cell">
-                            <button class="icon-btn edit-product" data-id="${p.id}">✏️</button>
-                            <button class="icon-btn delete-product" data-id="${p.id}">🗑️</button>
-                        </td>
-                    </tr>`;
-                });
-                html += '</tbody></table>';
-                html += this.renderPagination('products', totalPages, pag.page);
-            }
-            container.innerHTML = html;
-            this.updateProductDatalist();
-        }
-
-        renderBackup() {
-            document.getElementById('view-backup').innerHTML = `
+            </div>
+            <!-- Backup -->
+            <div id="view-backup">
                 <h2>💾 Respaldos</h2>
                 <div class="card">
                     <button id="exportBackup" style="width:100%; margin-bottom:1rem">📥 Exportar datos (backup.json)</button>
                     <div class="file-upload" id="importZone">
                         📂 Arrastrá o hacé clic para restaurar backup (JSON)
-                        <input type="file" id="importFile" accept=".json" style="display: none;">
+                        <input type="file" id="importFile" accept=".json, application/json" style="display: none;">
                     </div>
                 </div>
-            `;
-        }
+            </div>
+        </div>
+    </main>
+</div>
 
-        renderPagination(view, totalPages, currentPage) {
-            if (totalPages <= 1) return '';
-            let html = '<div class="pagination">';
-            for (let i = 1; i <= totalPages; i++) {
-                html += `<button class="${i === currentPage ? 'active' : ''}" data-view="${view}" data-page="${i}">${i}</button>`;
-            }
-            html += '</div>';
-            return html;
-        }
-
-        changePage(btn) {
-            const view = btn.dataset.view;
-            const page = parseInt(btn.dataset.page);
-            if (this.pagination[view]) {
-                this.pagination[view].page = page;
-                this.renderView(view);
-            }
-        }
-
-        // --- MODALES ---
-        openOrderModal(id = null) {
-            const modal = this.createModal('orderModal', `
-                <h3 id="modalTitle">${id ? '✏️ Editar Pedido' : '➕ Nuevo Pedido'}</h3>
-                <form id="orderForm">
-                    <input type="hidden" id="orderId" value="${id || ''}">
-                    <div class="form-grid">
-                        <div>
-                            <div class="form-group">
-                                <label>Cliente</label>
-                                <div class="inline-add">
-                                    <select id="customerSelect" required></select>
-                                    <button type="button" id="quickAddCustomerBtn" class="secondary">➕</button>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label>Fecha</label>
-                                <input type="datetime-local" id="orderDate" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Estado</label>
-                                <select id="orderStatus">
-                                    <option value="pendiente">Pendiente</option>
-                                    <option value="entregado">Entregado</option>
-                                    <option value="incompleto">Incompleto</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="form-group">
-                                <label>Comentarios</label>
-                                <textarea id="orderComments" placeholder="Notas del pedido..."></textarea>
-                            </div>
-                            <div class="form-group">
-                                <label>Foto del ticket</label>
-                                <input type="file" id="ticketPhoto" accept="image/*">
-                                <div id="photoPreviewContainer"></div>
-                            </div>
+<!-- Modal para pedido -->
+<div id="orderModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
+    <div style="background:white; border-radius:30px; width:90%; max-width:800px; max-height:90vh; overflow:auto; padding:2rem;">
+        <h3 id="modalTitle">➕ Nuevo Pedido</h3>
+        <form id="orderForm">
+            <input type="hidden" id="orderId">
+            <div class="form-grid">
+                <div>
+                    <div class="form-group">
+                        <label>Cliente</label>
+                        <div class="inline-add">
+                            <select id="customerSelect" required></select>
+                            <button type="button" id="quickAddCustomerBtn" class="secondary" style="width:40px; height:40px; border-radius:50%;">➕</button>
                         </div>
                     </div>
-                    <fieldset style="border:1px solid #eaeef2; border-radius:20px; padding:1rem; margin:1rem 0;">
-                        <legend>📦 Productos en el pedido</legend>
-                        <div id="productsContainer"></div>
-                        <button type="button" id="addProductBtn" class="secondary" style="margin-top:0.5rem">➕ Agregar producto</button>
-                    </fieldset>
-                    <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
-                        <button type="button" id="cancelOrderBtn" class="secondary">Cancelar</button>
-                        <button type="submit" id="saveOrderBtn">Guardar pedido</button>
+                    <div class="form-group">
+                        <label>Fecha</label>
+                        <input type="datetime-local" id="orderDate" required>
                     </div>
-                </form>
-            `);
+                    <div class="form-group">
+                        <label>Estado</label>
+                        <select id="orderStatus">
+                            <option value="pendiente">Pendiente</option>
+                            <option value="entregado">Entregado</option>
+                            <option value="incompleto">Incompleto</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <div class="form-group">
+                        <label>Comentarios</label>
+                        <textarea id="orderComments" placeholder="Notas del pedido..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Foto del ticket</label>
+                        <input type="file" id="ticketPhoto" accept="image/*">
+                        <div id="photoPreviewContainer"></div>
+                    </div>
+                </div>
+            </div>
+            <fieldset style="border:1px solid #eaeef2; border-radius:20px; padding:1rem; margin:1rem 0;">
+                <legend>📦 Productos en el pedido</legend>
+                <div id="productsContainer"></div>
+                <button type="button" id="addProductBtn" class="secondary" style="margin-top:0.5rem">➕ Agregar producto</button>
+            </fieldset>
+            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
+                <button type="button" id="cancelOrderBtn" class="secondary">Cancelar</button>
+                <button type="submit" id="saveOrderBtn">Guardar pedido</button>
+            </div>
+        </form>
+    </div>
+</div>
 
-            this.updateCustomerSelect();
-            if (id) {
-                const order = this.data.orders.find(o => o.id === id);
-                if (order) {
-                    document.getElementById('orderId').value = order.id;
-                    document.getElementById('customerSelect').value = order.customerId;
-                    document.getElementById('orderDate').value = order.date;
-                    document.getElementById('orderStatus').value = order.status;
-                    document.getElementById('orderComments').value = order.comments || '';
-                    order.items.forEach(item => this.addProductRow(item));
-                    if (order.ticketPhoto) {
-                        document.getElementById('photoPreviewContainer').innerHTML = `<img src="${order.ticketPhoto}" class="photo-preview">`;
+<!-- Modal mini para cliente rápido -->
+<div id="quickCustomerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1100;">
+    <div style="background:white; border-radius:30px; width:90%; max-width:400px; padding:2rem;">
+        <h3>➕ Cliente Rápido</h3>
+        <form id="quickCustomerForm">
+            <div class="form-group">
+                <label>Nombre *</label>
+                <input type="text" id="quickName" required>
+            </div>
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input type="text" id="quickPhone">
+            </div>
+            <div class="form-group">
+                <label>Dirección</label>
+                <input type="text" id="quickAddress">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="quickEmail">
+            </div>
+            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:1.5rem;">
+                <button type="button" id="cancelQuickBtn" class="secondary">Cancelar</button>
+                <button type="submit" id="saveQuickBtn">Guardar y usar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal para imagen -->
+<div id="imageModal" class="image-modal" style="display:none;" onclick="this.style.display='none'">
+    <span class="close">&times;</span>
+    <img id="modalImage" src="" alt="Foto ticket">
+</div>
+
+<!-- Modal para cliente normal (editar/agregar) -->
+<div id="customerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
+    <div style="background:white; border-radius:30px; width:90%; max-width:500px; padding:2rem;">
+        <h3 id="customerModalTitle">👤 Nuevo Cliente</h3>
+        <form id="customerForm">
+            <input type="hidden" id="customerId">
+            <div class="form-group">
+                <label>Nombre *</label>
+                <input type="text" id="customerName" required>
+            </div>
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input type="text" id="customerPhone">
+            </div>
+            <div class="form-group">
+                <label>Dirección</label>
+                <input type="text" id="customerAddress">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="customerEmail">
+            </div>
+            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
+                <button type="button" id="cancelCustomerBtn" class="secondary">Cancelar</button>
+                <button type="submit" id="saveCustomerBtn">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    (function() {
+        // --- Estado y localStorage ---
+        const STORAGE_KEYS = {
+            CUSTOMERS: 'repartos_customers',
+            PRODUCTS: 'repartos_products',
+            ORDERS: 'repartos_orders'
+        };
+
+        let customers = [
+            { id: 'c1', name: 'Juan Pérez', phone: '11 1234-5678', address: 'Av. Siempreviva 123', email: 'juan@mail.com' },
+            { id: 'c2', name: 'María Gómez', phone: '11 8765-4321', address: 'Calle Falsa 456', email: 'maria@mail.com' }
+        ];
+        let products = [
+            { id: 'p1', name: 'Arroz 1kg', price: 120 },
+            { id: 'p2', name: 'Fideos 500g', price: 90 },
+            { id: 'p3', name: 'Aceite 1.5L', price: 350 }
+        ];
+        let orders = [
+            { id: 'o1', customerId: 'c1', date: '2025-03-15T10:30', status: 'pendiente', comments: 'Llamar antes de llegar', items: [{ productId: null, productName: 'Arroz 1kg', quantity: 2, price: 120 }], ticketPhoto: '' },
+            { id: 'o2', customerId: 'c2', date: '2025-03-16T15:45', status: 'entregado', comments: 'Dejar con el portero', items: [{ productId: null, productName: 'Fideos 500g', quantity: 3, price: 90 }], ticketPhoto: '' }
+        ];
+
+        function loadFromStorage() {
+            try {
+                const storedCustomers = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
+                if (storedCustomers) customers = JSON.parse(storedCustomers);
+                const storedProducts = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+                if (storedProducts) products = JSON.parse(storedProducts);
+                const storedOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
+                if (storedOrders) orders = JSON.parse(storedOrders);
+            } catch (e) { console.warn('Error loading', e); }
+        }
+        loadFromStorage();
+
+        function saveToStorage() {
+            localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+            localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+        }
+
+        function generateId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 9); }
+
+        // ----- Referencias DOM -----
+        const viewsContainer = document.getElementById('viewsContainer');
+        const navBtns = document.querySelectorAll('.nav-btn');
+        const newOrderBtn = document.getElementById('newOrderBtn');
+        const searchOrders = document.getElementById('searchOrders');
+        const statusFilter = document.getElementById('statusFilter');
+        const dateFrom = document.getElementById('dateFrom');
+        const dateTo = document.getElementById('dateTo');
+        const ordersListDiv = document.getElementById('ordersList');
+        const customersListDiv = document.getElementById('customersList');
+        const productListDiv = document.getElementById('productList');
+        const newCustomerBtn = document.getElementById('newCustomerBtn');
+        const productFile = document.getElementById('productFile');
+        const dropZone = document.getElementById('dropZone');
+        const clearProductsBtn = document.getElementById('clearProducts');
+        const exportBackupBtn = document.getElementById('exportBackup');
+        const importZone = document.getElementById('importZone');
+        const importFile = document.getElementById('importFile');
+
+        // Modales
+        const orderModal = document.getElementById('orderModal');
+        const quickCustomerModal = document.getElementById('quickCustomerModal');
+        const customerModal = document.getElementById('customerModal');
+        const imageModal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+
+        // Elementos dentro de modales
+        const quickAddCustomerBtn = document.getElementById('quickAddCustomerBtn');
+        const quickCustomerForm = document.getElementById('quickCustomerForm');
+        const cancelQuickBtn = document.getElementById('cancelQuickBtn');
+        const quickName = document.getElementById('quickName');
+        const quickPhone = document.getElementById('quickPhone');
+        const quickAddress = document.getElementById('quickAddress');
+        const quickEmail = document.getElementById('quickEmail');
+
+        const orderForm = document.getElementById('orderForm');
+        const cancelOrderBtn = document.getElementById('cancelOrderBtn');
+        const addProductBtn = document.getElementById('addProductBtn');
+        const productsContainer = document.getElementById('productsContainer');
+        const customerSelect = document.getElementById('customerSelect');
+        const orderDate = document.getElementById('orderDate');
+        const orderStatus = document.getElementById('orderStatus');
+        const orderComments = document.getElementById('orderComments');
+        const ticketPhoto = document.getElementById('ticketPhoto');
+        const photoPreviewContainer = document.getElementById('photoPreviewContainer');
+        const orderIdHidden = document.getElementById('orderId');
+        const modalTitle = document.getElementById('modalTitle');
+
+        const customerForm = document.getElementById('customerForm');
+        const cancelCustomerBtn = document.getElementById('cancelCustomerBtn');
+        const customerIdHidden = document.getElementById('customerId');
+        const customerName = document.getElementById('customerName');
+        const customerPhone = document.getElementById('customerPhone');
+        const customerAddress = document.getElementById('customerAddress');
+        const customerEmail = document.getElementById('customerEmail');
+        const customerModalTitle = document.getElementById('customerModalTitle');
+
+        // ---- Utilidades de vista ----
+        function setActiveView(viewId) {
+            document.querySelectorAll('.views-container > div').forEach(div => div.classList.remove('active-view'));
+            document.getElementById(`view-${viewId}`).classList.add('active-view');
+            navBtns.forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`.nav-btn[data-view="${viewId}"]`).classList.add('active');
+            if (viewId === 'orders') renderOrders();
+            if (viewId === 'customers') renderCustomers();
+            if (viewId === 'products') renderProductsList();
+        }
+
+        navBtns.forEach(btn => btn.addEventListener('click', () => setActiveView(btn.dataset.view)));
+
+        // ---- Render Pedidos con filtros mejorados ----
+        function renderOrders() {
+            const filterText = searchOrders ? searchOrders.value.toLowerCase() : '';
+            const filterStatus = statusFilter ? statusFilter.value : 'todos';
+            const fromDate = dateFrom ? dateFrom.value : '';
+            const toDate = dateTo ? dateTo.value : '';
+
+            let filtered = orders.filter(order => {
+                // Filtro por estado
+                if (filterStatus !== 'todos' && order.status !== filterStatus) return false;
+
+                // Filtro por fecha
+                const orderDateStr = order.date.split('T')[0]; // YYYY-MM-DD
+                if (fromDate && orderDateStr < fromDate) return false;
+                if (toDate && orderDateStr > toDate) return false;
+
+                // Filtro por texto (cliente, teléfono, dirección, email, productos, comentarios)
+                if (filterText) {
+                    const customer = customers.find(c => c.id === order.customerId) || {};
+                    const customerName = (customer.name || '').toLowerCase();
+                    const customerPhone = (customer.phone || '').toLowerCase();
+                    const customerAddress = (customer.address || '').toLowerCase();
+                    const customerEmail = (customer.email || '').toLowerCase();
+                    const comments = (order.comments || '').toLowerCase();
+                    const productNames = order.items.map(i => i.productName.toLowerCase()).join(' ');
+
+                    const hayMatch = customerName.includes(filterText) ||
+                                    customerPhone.includes(filterText) ||
+                                    customerAddress.includes(filterText) ||
+                                    customerEmail.includes(filterText) ||
+                                    comments.includes(filterText) ||
+                                    productNames.includes(filterText);
+                    if (!hayMatch) return false;
+                }
+                return true;
+            });
+
+            if (!ordersListDiv) return;
+            if (filtered.length === 0) {
+                ordersListDiv.innerHTML = '<p class="card">No hay pedidos.</p>';
+                return;
+            }
+            let html = '<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Estado</th><th>Productos</th><th>Comentarios</th><th>Acciones</th></tr></thead><tbody>';
+            filtered.forEach(order => {
+                const customer = customers.find(c => c.id === order.customerId) || { name: '?' };
+                const itemsList = order.items.map(i => `<li>${i.productName} x${i.quantity} ($${i.price})</li>`).join('');
+                const itemsHtml = `<ul class="product-list">${itemsList}</ul>`;
+                html += `<tr data-order-id="${order.id}">
+                    <td>${new Date(order.date).toLocaleString()}</td>
+                    <td>${customer.name}</td>
+                    <td>
+                        <span class="badge ${order.status}" data-order-id="${order.id}">${order.status}</span>
+                        <div class="status-menu" id="status-menu-${order.id}">
+                            <button data-status="pendiente">Pendiente</button>
+                            <button data-status="entregado">Entregado</button>
+                            <button data-status="incompleto">Incompleto</button>
+                        </div>
+                    </td>
+                    <td>${itemsHtml}</td>
+                    <td>${order.comments || ''}</td>
+                    <td class="actions-cell">
+                        <button class="icon-btn edit-order" data-id="${order.id}">✏️</button>
+                        <button class="icon-btn delete-order" data-id="${order.id}">🗑️</button>
+                        ${order.ticketPhoto ? `<button class="icon-btn view-photo" data-photo="${order.ticketPhoto}">📷</button>` : ''}
+                    </td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            ordersListDiv.innerHTML = html;
+
+            // Eventos editar/eliminar
+            document.querySelectorAll('.edit-order').forEach(btn => btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openOrderModal(btn.dataset.id);
+            }));
+            document.querySelectorAll('.delete-order').forEach(btn => btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteOrder(btn.dataset.id);
+            }));
+
+            // Eventos ver foto
+            document.querySelectorAll('.view-photo').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const photo = btn.dataset.photo;
+                    if (photo) {
+                        modalImage.src = photo;
+                        imageModal.style.display = 'flex';
                     }
+                });
+            });
+
+            // Eventos cambio de estado
+            document.querySelectorAll('.badge').forEach(badge => {
+                badge.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const orderId = badge.dataset.orderId;
+                    const menu = document.getElementById(`status-menu-${orderId}`);
+                    document.querySelectorAll('.status-menu').forEach(m => m.style.display = 'none');
+                    const rect = badge.getBoundingClientRect();
+                    menu.style.position = 'absolute';
+                    menu.style.top = rect.bottom + window.scrollY + 'px';
+                    menu.style.left = rect.left + window.scrollX + 'px';
+                    menu.style.display = 'block';
+                });
+            });
+
+            document.querySelectorAll('.status-menu button').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const menu = btn.closest('.status-menu');
+                    const orderId = menu.id.replace('status-menu-', '');
+                    const newStatus = btn.dataset.status;
+                    const order = orders.find(o => o.id === orderId);
+                    if (order) {
+                        order.status = newStatus;
+                        saveToStorage();
+                        renderOrders();
+                    }
+                    menu.style.display = 'none';
+                });
+            });
+
+            // Cerrar menús al hacer clic fuera
+            document.addEventListener('click', () => {
+                document.querySelectorAll('.status-menu').forEach(m => m.style.display = 'none');
+            });
+        }
+
+        function deleteOrder(id) {
+            if (confirm('¿Eliminar pedido?')) {
+                orders = orders.filter(o => o.id !== id);
+                saveToStorage();
+                renderOrders();
+            }
+        }
+
+        // ---- Clientes ----
+        function renderCustomers() {
+            if (!customersListDiv) return;
+            if (customers.length === 0) {
+                customersListDiv.innerHTML = '<p class="card">No hay clientes.</p>';
+                return;
+            }
+            let html = '<table><thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Email</th><th>Acciones</th></tr></thead><tbody>';
+            customers.forEach(c => {
+                html += `<tr>
+                    <td>${c.name}</td>
+                    <td>${c.phone || ''}</td>
+                    <td>${c.address || ''}</td>
+                    <td>${c.email || ''}</td>
+                    <td class="actions-cell">
+                        <button class="icon-btn edit-customer" data-id="${c.id}">✏️</button>
+                        <button class="icon-btn delete-customer" data-id="${c.id}">🗑️</button>
+                    </td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            customersListDiv.innerHTML = html;
+            document.querySelectorAll('.edit-customer').forEach(btn => btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openCustomerModal(btn.dataset.id);
+            }));
+            document.querySelectorAll('.delete-customer').forEach(btn => btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteCustomer(btn.dataset.id);
+            }));
+        }
+
+        function deleteCustomer(id) {
+            if (orders.some(o => o.customerId === id)) {
+                alert('No se puede eliminar un cliente con pedidos asociados.');
+                return;
+            }
+            if (confirm('¿Eliminar cliente?')) {
+                customers = customers.filter(c => c.id !== id);
+                saveToStorage();
+                renderCustomers();
+                updateCustomerSelect(); // actualizar selector en pedidos
+            }
+        }
+
+        // ---- Productos ----
+        function renderProductsList() {
+            if (!productListDiv) return;
+            if (products.length === 0) {
+                productListDiv.innerHTML = '<p>No hay productos cargados. Subí un archivo CSV o Excel.</p>';
+                return;
+            }
+            let html = '<table><thead><tr><th>Nombre</th><th>Precio</th></tr></thead><tbody>';
+            products.slice(0, 100).forEach(p => {
+                html += `<tr><td>${p.name}</td><td>${p.price ? '$' + p.price : '-'}</td></tr>`;
+            });
+            if (products.length > 100) html += '<tr><td colspan="2">... y ' + (products.length-100) + ' más</td></tr>';
+            html += '</tbody></table>';
+            productListDiv.innerHTML = html;
+        }
+
+        // ---- Modal Pedido ----
+        function openOrderModal(orderId = null) {
+            const isEdit = !!orderId;
+            modalTitle.innerText = isEdit ? '✏️ Editar Pedido' : '➕ Nuevo Pedido';
+            orderForm.reset();
+            orderIdHidden.value = '';
+            productsContainer.innerHTML = '';
+            photoPreviewContainer.innerHTML = '';
+            updateCustomerSelect();
+            if (isEdit) {
+                const order = orders.find(o => o.id === orderId);
+                if (!order) return;
+                orderIdHidden.value = order.id;
+                customerSelect.value = order.customerId;
+                orderDate.value = order.date;
+                orderStatus.value = order.status;
+                orderComments.value = order.comments || '';
+                order.items.forEach(item => addProductRow(item));
+                if (order.ticketPhoto) {
+                    const img = document.createElement('img');
+                    img.src = order.ticketPhoto;
+                    img.className = 'photo-preview';
+                    photoPreviewContainer.appendChild(img);
                 }
             } else {
                 const now = new Date();
-                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-                document.getElementById('orderDate').value = now.toISOString().slice(0, 16);
-                this.addProductRow();
+                const tzOffset = now.getTimezoneOffset() * 60000;
+                const localISOTime = new Date(now - tzOffset).toISOString().slice(0, 16);
+                orderDate.value = localISOTime;
+                addProductRow();
             }
-            modal.style.display = 'flex';
+            orderModal.style.display = 'flex';
         }
 
-        openCustomerModal(id = null) {
-            const modal = this.createModal('customerModal', `
-                <h3 id="customerModalTitle">${id ? '✏️ Editar Cliente' : '👤 Nuevo Cliente'}</h3>
-                <form id="customerForm">
-                    <input type="hidden" id="customerId" value="${id || ''}">
-                    <div class="form-group">
-                        <label>Nombre *</label>
-                        <input type="text" id="customerName" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Teléfono</label>
-                        <input type="text" id="customerPhone">
-                    </div>
-                    <div class="form-group">
-                        <label>Dirección</label>
-                        <input type="text" id="customerAddress">
-                    </div>
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="customerEmail">
-                    </div>
-                    <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
-                        <button type="button" id="cancelCustomerBtn" class="secondary">Cancelar</button>
-                        <button type="submit" id="saveCustomerBtn">Guardar</button>
-                    </div>
-                </form>
-            `);
-
-            if (id) {
-                const cust = this.data.customers.find(c => c.id === id);
-                if (cust) {
-                    document.getElementById('customerId').value = cust.id;
-                    document.getElementById('customerName').value = cust.name;
-                    document.getElementById('customerPhone').value = cust.phone || '';
-                    document.getElementById('customerAddress').value = cust.address || '';
-                    document.getElementById('customerEmail').value = cust.email || '';
-                }
-            }
+        function updateCustomerSelect() {
+            customerSelect.innerHTML = '<option value="">Seleccionar cliente</option>' + customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
         }
 
-        openProductModal(id = null) {
-            const modal = this.createModal('productModal', `
-                <h3>${id ? '✏️ Editar Producto' : '➕ Nuevo Producto'}</h3>
-                <form id="productForm">
-                    <input type="hidden" id="productId" value="${id || ''}">
-                    <div class="form-group">
-                        <label>Nombre *</label>
-                        <input type="text" id="productName" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Precio</label>
-                        <input type="number" id="productPrice" min="0" step="0.01">
-                    </div>
-                    <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
-                        <button type="button" id="cancelProductBtn" class="secondary">Cancelar</button>
-                        <button type="submit" id="saveProductBtn">Guardar</button>
-                    </div>
-                </form>
-            `);
-
-            if (id) {
-                const prod = this.data.products.find(p => p.id === id);
-                if (prod) {
-                    document.getElementById('productId').value = prod.id;
-                    document.getElementById('productName').value = prod.name;
-                    document.getElementById('productPrice').value = prod.price || '';
-                }
-            }
-        }
-
-        openQuickCustomerModal() {
-            const modal = this.createModal('quickCustomerModal', `
-                <h3>➕ Cliente Rápido</h3>
-                <form id="quickCustomerForm">
-                    <div class="form-group">
-                        <label>Nombre *</label>
-                        <input type="text" id="quickName" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Teléfono</label>
-                        <input type="text" id="quickPhone">
-                    </div>
-                    <div class="form-group">
-                        <label>Dirección</label>
-                        <input type="text" id="quickAddress">
-                    </div>
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="quickEmail">
-                    </div>
-                    <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:1.5rem;">
-                        <button type="button" id="cancelQuickBtn" class="secondary">Cancelar</button>
-                        <button type="submit" id="saveQuickBtn">Guardar y usar</button>
-                    </div>
-                </form>
-            `);
-        }
-
-        createModal(id, content) {
-            let modal = document.getElementById(id);
-            if (modal) modal.remove();
-            modal = document.createElement('div');
-            modal.id = id;
-            modal.className = 'modal';
-            modal.style.cssText = 'display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;';
-            modal.innerHTML = `<div style="background:white; border-radius:30px; width:90%; max-width:800px; max-height:90vh; overflow:auto; padding:2rem;">${content}</div>`;
-            document.body.appendChild(modal);
-            return modal;
-        }
-
-        closeModal(id) {
-            document.getElementById(id)?.remove();
-        }
-
-        // --- CRUD OPERATIONS ---
-        async saveOrder(e) {
-            e.preventDefault();
-            const customerId = document.getElementById('customerSelect').value;
-            if (!customerId) return this.toast.show('Seleccioná un cliente', 'error');
-
-            const items = [];
-            document.querySelectorAll('#productsContainer .product-item').forEach(row => {
-                const name = row.querySelector('.product-name')?.value.trim();
-                const qty = parseInt(row.querySelector('.product-qty')?.value) || 1;
-                const price = parseFloat(row.querySelector('.product-price')?.value) || 0;
-                if (name) items.push({ productId: null, productName: name, quantity: qty, price });
-            });
-            if (items.length === 0) return this.toast.show('Agregá al menos un producto', 'error');
-
-            const photoPreview = document.querySelector('#photoPreviewContainer img');
-            const ticketPhoto = photoPreview ? photoPreview.src : '';
-
-            const orderData = {
-                id: document.getElementById('orderId').value || Utils.generateId(),
-                customerId,
-                date: document.getElementById('orderDate').value,
-                status: document.getElementById('orderStatus').value,
-                comments: document.getElementById('orderComments').value,
-                items,
-                ticketPhoto
-            };
-
-            if (this.data.orders.some(o => o.id === orderData.id)) {
-                this.data.orders = this.data.orders.map(o => o.id === orderData.id ? orderData : o);
-            } else {
-                this.data.orders.push(orderData);
-            }
-
-            Store.save(this.data);
-            this.closeModal('orderModal');
-            this.renderView('orders');
-            this.toast.show('Pedido guardado', 'success');
-        }
-
-        saveCustomer(e) {
-            e.preventDefault();
-            const custData = {
-                id: document.getElementById('customerId').value || Utils.generateId(),
-                name: document.getElementById('customerName').value.trim(),
-                phone: document.getElementById('customerPhone').value.trim(),
-                address: document.getElementById('customerAddress').value.trim(),
-                email: document.getElementById('customerEmail').value.trim()
-            };
-            if (!custData.name) return this.toast.show('El nombre es obligatorio', 'error');
-
-            if (this.data.customers.some(c => c.id === custData.id)) {
-                this.data.customers = this.data.customers.map(c => c.id === custData.id ? custData : c);
-            } else {
-                this.data.customers.push(custData);
-            }
-
-            Store.save(this.data);
-            this.closeModal('customerModal');
-            this.renderView('customers');
-            this.toast.show('Cliente guardado', 'success');
-        }
-
-        saveProduct(e) {
-            e.preventDefault();
-            const prodData = {
-                id: document.getElementById('productId').value || Utils.generateId(),
-                name: document.getElementById('productName').value.trim(),
-                price: parseFloat(document.getElementById('productPrice').value) || undefined
-            };
-            if (!prodData.name) return this.toast.show('El nombre es obligatorio', 'error');
-
-            if (this.data.products.some(p => p.id === prodData.id)) {
-                this.data.products = this.data.products.map(p => p.id === prodData.id ? prodData : p);
-            } else {
-                this.data.products.push(prodData);
-            }
-
-            Store.save(this.data);
-            this.closeModal('productModal');
-            this.renderView('products');
-            this.updateProductDatalist();
-            this.toast.show('Producto guardado', 'success');
-        }
-
-        saveQuickCustomer(e) {
-            e.preventDefault();
-            const newCust = {
-                id: Utils.generateId(),
-                name: document.getElementById('quickName').value.trim(),
-                phone: document.getElementById('quickPhone').value.trim(),
-                address: document.getElementById('quickAddress').value.trim(),
-                email: document.getElementById('quickEmail').value.trim()
-            };
-            if (!newCust.name) return this.toast.show('El nombre es obligatorio', 'error');
-            this.data.customers.push(newCust);
-            Store.save(this.data);
-            this.updateCustomerSelect();
-            document.getElementById('customerSelect').value = newCust.id;
-            this.closeModal('quickCustomerModal');
-            this.toast.show('Cliente rápido agregado', 'success');
-        }
-
-        deleteOrder(id) {
-            if (confirm('¿Eliminar pedido?')) {
-                this.data.orders = this.data.orders.filter(o => o.id !== id);
-                Store.save(this.data);
-                this.renderView('orders');
-                this.toast.show('Pedido eliminado', 'success');
-            }
-        }
-
-        deleteCustomer(id) {
-            if (this.data.orders.some(o => o.customerId === id)) {
-                return this.toast.show('No se puede eliminar un cliente con pedidos', 'error');
-            }
-            if (confirm('¿Eliminar cliente?')) {
-                this.data.customers = this.data.customers.filter(c => c.id !== id);
-                Store.save(this.data);
-                this.renderView('customers');
-                this.toast.show('Cliente eliminado', 'success');
-            }
-        }
-
-        deleteProduct(id) {
-            if (confirm('¿Eliminar producto?')) {
-                this.data.products = this.data.products.filter(p => p.id !== id);
-                Store.save(this.data);
-                this.renderView('products');
-                this.updateProductDatalist();
-                this.toast.show('Producto eliminado', 'success');
-            }
-        }
-
-        clearProducts() {
-            if (confirm('¿Eliminar todos los productos?')) {
-                this.data.products = [];
-                Store.save(this.data);
-                this.renderView('products');
-                this.updateProductDatalist();
-                this.toast.show('Productos eliminados', 'success');
-            }
-        }
-
-        // --- UTILS ---
-        updateCustomerSelect() {
-            const select = document.getElementById('customerSelect');
-            if (select) {
-                select.innerHTML = '<option value="">Seleccionar cliente</option>' +
-                    this.data.customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            }
-        }
-
-        updateProductDatalist() {
-            let datalist = document.getElementById('productDatalist');
-            if (!datalist) {
-                datalist = document.createElement('datalist');
-                datalist.id = 'productDatalist';
-                document.body.appendChild(datalist);
-            }
-            datalist.innerHTML = this.data.products.map(p => `<option value="${p.name}" data-price="${p.price || ''}">`).join('');
-        }
-
-        addProductRow(item = null) {
-            const container = document.getElementById('productsContainer');
+        function addProductRow(item = null) {
             const div = document.createElement('div');
             div.className = 'product-item';
             div.innerHTML = `
@@ -926,88 +615,219 @@
                 <button type="button" class="remove-product">✕</button>
             `;
             div.querySelector('.remove-product').addEventListener('click', () => div.remove());
-            container.appendChild(div);
+            productsContainer.appendChild(div);
         }
 
-        showImage(src) {
-            const modal = document.createElement('div');
-            modal.className = 'image-modal';
-            modal.innerHTML = `<span class="close">&times;</span><img src="${src}" alt="Foto">`;
-            modal.onclick = () => modal.remove();
-            document.body.appendChild(modal);
-        }
+        cancelOrderBtn.addEventListener('click', () => orderModal.style.display = 'none');
+        window.addEventListener('click', (e) => {
+            if (e.target === orderModal) orderModal.style.display = 'none';
+            if (e.target === quickCustomerModal) quickCustomerModal.style.display = 'none';
+            if (e.target === customerModal) customerModal.style.display = 'none';
+            if (e.target === imageModal) imageModal.style.display = 'none';
+        });
 
-        showStatusMenu(badge) {
-            const orderId = badge.dataset.orderId;
-            const menu = document.getElementById(`status-menu-${orderId}`);
-            if (!menu) return;
-            document.querySelectorAll('.status-menu').forEach(m => m.style.display = 'none');
-            const rect = badge.getBoundingClientRect();
-            menu.style.top = rect.bottom + window.scrollY + 'px';
-            menu.style.left = rect.left + window.scrollX + 'px';
-            menu.style.display = 'block';
-        }
-
-        changeStatus(btn) {
-            const menu = btn.closest('.status-menu');
-            const orderId = menu.id.replace('status-menu-', '');
-            const newStatus = btn.dataset.status;
-            const order = this.data.orders.find(o => o.id === orderId);
-            if (order) {
-                order.status = newStatus;
-                Store.save(this.data);
-                this.renderView('orders');
-                this.toast.show('Estado actualizado', 'success');
-            }
-            menu.style.display = 'none';
-        }
-
-        // --- IMPORT/EXPORT ---
-        async handleProductFile(file) {
-            if (!file) return;
-            const dropZone = document.getElementById('dropZone');
-            dropZone.innerHTML = `<span class="spinner"></span> Procesando...`;
-
-            try {
-                const ext = file.name.split('.').pop().toLowerCase();
-                let newProducts = [];
-
-                if (ext === 'csv') {
-                    const text = await file.text();
-                    newProducts = this.parseCSV(text);
-                } else if (['xls', 'xlsx'].includes(ext)) {
-                    const data = await file.arrayBuffer();
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-                    newProducts = this.parseExcel(rows);
-                } else {
-                    throw new Error('Formato no soportado');
+        orderForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const customerId = customerSelect.value;
+            if (!customerId) return alert('Seleccioná un cliente');
+            const items = [];
+            document.querySelectorAll('#productsContainer .product-item').forEach(row => {
+                const nameInput = row.querySelector('.product-name');
+                const qtyInput = row.querySelector('.product-qty');
+                const priceInput = row.querySelector('.product-price');
+                if (nameInput.value.trim() !== '') {
+                    items.push({
+                        productId: null,
+                        productName: nameInput.value.trim(),
+                        quantity: parseInt(qtyInput.value) || 1,
+                        price: parseFloat(priceInput.value) || 0
+                    });
                 }
+            });
+            if (items.length === 0) return alert('Agregá al menos un producto');
 
-                this.data.products = newProducts;
-                Store.save(this.data);
-                this.renderView('products');
-                this.updateProductDatalist();
-                dropZone.innerHTML = '✅ Productos cargados correctamente';
-                setTimeout(() => dropZone.innerHTML = '📂 Arrastrá o hacé clic para seleccionar archivo', 2000);
-            } catch (err) {
-                dropZone.innerHTML = '❌ Error: ' + err.message;
-                setTimeout(() => dropZone.innerHTML = '📂 Arrastrá o hacé clic para seleccionar archivo', 3000);
+            let ticketPhotoBase64 = '';
+            const photoImg = photoPreviewContainer.querySelector('img');
+            if (photoImg) ticketPhotoBase64 = photoImg.src;
+
+            const orderData = {
+                id: orderIdHidden.value || generateId(),
+                customerId,
+                date: orderDate.value,
+                status: orderStatus.value,
+                comments: orderComments.value,
+                items,
+                ticketPhoto: ticketPhotoBase64
+            };
+
+            if (orderIdHidden.value) {
+                orders = orders.map(o => o.id === orderData.id ? orderData : o);
+            } else {
+                orders.push(orderData);
+            }
+            saveToStorage();
+            orderModal.style.display = 'none';
+            renderOrders();
+        });
+
+        ticketPhoto.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    photoPreviewContainer.innerHTML = `<img src="${ev.target.result}" class="photo-preview">`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        addProductBtn.addEventListener('click', () => addProductRow());
+
+        // ---- Cliente rápido ----
+        quickAddCustomerBtn.addEventListener('click', () => {
+            quickCustomerForm.reset();
+            quickCustomerModal.style.display = 'flex';
+        });
+
+        cancelQuickBtn.addEventListener('click', () => quickCustomerModal.style.display = 'none');
+
+        quickCustomerForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const newCust = {
+                id: generateId(),
+                name: quickName.value.trim(),
+                phone: quickPhone.value.trim(),
+                address: quickAddress.value.trim(),
+                email: quickEmail.value.trim()
+            };
+            if (!newCust.name) return alert('El nombre es obligatorio');
+            customers.push(newCust);
+            saveToStorage();
+            updateCustomerSelect();
+            customerSelect.value = newCust.id;
+            quickCustomerModal.style.display = 'none';
+        });
+
+        // ---- Cliente normal ----
+        function openCustomerModal(id = null) {
+            customerModalTitle.innerText = id ? '✏️ Editar Cliente' : '👤 Nuevo Cliente';
+            customerForm.reset();
+            customerIdHidden.value = '';
+            if (id) {
+                const cust = customers.find(c => c.id === id);
+                if (cust) {
+                    customerIdHidden.value = cust.id;
+                    customerName.value = cust.name;
+                    customerPhone.value = cust.phone || '';
+                    customerAddress.value = cust.address || '';
+                    customerEmail.value = cust.email || '';
+                }
+            }
+            customerModal.style.display = 'flex';
+        }
+
+        customerForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const custData = {
+                id: customerIdHidden.value || generateId(),
+                name: customerName.value.trim(),
+                phone: customerPhone.value.trim(),
+                address: customerAddress.value.trim(),
+                email: customerEmail.value.trim()
+            };
+            if (!custData.name) return alert('El nombre es obligatorio');
+            if (customerIdHidden.value) {
+                customers = customers.map(c => c.id === custData.id ? custData : c);
+            } else {
+                customers.push(custData);
+            }
+            saveToStorage();
+            customerModal.style.display = 'none';
+            renderCustomers();
+            updateCustomerSelect();
+        });
+
+        cancelCustomerBtn.addEventListener('click', () => customerModal.style.display = 'none');
+        newCustomerBtn.addEventListener('click', () => openCustomerModal());
+        newOrderBtn.addEventListener('click', () => openOrderModal());
+
+        // Filtros pedidos (eventos)
+        searchOrders.addEventListener('input', renderOrders);
+        statusFilter.addEventListener('change', renderOrders);
+        dateFrom.addEventListener('change', renderOrders);
+        dateTo.addEventListener('change', renderOrders);
+
+        // ---- Productos: carga Excel/CSV (misma lógica) ----
+        function handleProductFile(file) {
+            const reader = new FileReader();
+            const fileType = file.name.split('.').pop().toLowerCase();
+            dropZone.innerHTML = `<span class="spinner"></span> Procesando archivo...`;
+
+            if (fileType === 'csv') {
+                reader.onload = (ev) => {
+                    try {
+                        const newProducts = parseCSV(ev.target.result);
+                        updateProducts(newProducts);
+                    } catch (err) {
+                        alert('Error al leer CSV: ' + err.message);
+                        resetDropZone();
+                    }
+                };
+                reader.readAsText(file);
+            } else if (fileType === 'xls' || fileType === 'xlsx') {
+                reader.onload = (ev) => {
+                    try {
+                        const data = new Uint8Array(ev.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                        if (rows.length < 2) throw new Error('El archivo no tiene datos');
+                        const headers = rows[0].map(h => String(h).toLowerCase().trim());
+                        const nameIdx = headers.findIndex(h => h.includes('nombre') || h === 'producto' || h === 'productos');
+                        const priceIdx = headers.findIndex(h => h.includes('precio') || h.includes('importe') || h === 'costo');
+                        if (nameIdx === -1) throw new Error('No se encontró una columna de "nombre" o "producto"');
+
+                        const newProducts = [];
+                        for (let i = 1; i < rows.length; i++) {
+                            const row = rows[i];
+                            if (!row || row.length === 0) continue;
+                            const name = row[nameIdx] ? String(row[nameIdx]).trim() : '';
+                            if (!name) continue;
+                            let price = undefined;
+                            if (priceIdx !== -1 && row[priceIdx] !== undefined) {
+                                const val = row[priceIdx];
+                                if (typeof val === 'number') price = val;
+                                else if (typeof val === 'string') {
+                                    const num = parseFloat(val.replace(/[^\d.,-]/g, '').replace(',', '.'));
+                                    if (!isNaN(num)) price = num;
+                                }
+                            }
+                            newProducts.push({ id: generateId(), name, price });
+                        }
+                        updateProducts(newProducts);
+                    } catch (err) {
+                        alert('Error al leer Excel: ' + err.message);
+                        resetDropZone();
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                alert('Formato no soportado. Usá CSV o Excel.');
+                resetDropZone();
             }
         }
 
-        parseCSV(text) {
-            const lines = text.split('\n').filter(l => l.trim());
-            if (lines.length < 2) return [];
+        function parseCSV(text) {
+            const lines = text.split('\n').filter(l => l.trim() !== '');
+            if (lines.length === 0) return [];
             const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
             const nameIdx = headers.findIndex(h => h.includes('nombre') || h === 'producto');
             const priceIdx = headers.findIndex(h => h.includes('precio') || h.includes('importe'));
-            if (nameIdx === -1) throw new Error('Columna "nombre" no encontrada');
-
-            const products = [];
+            if (nameIdx === -1) throw new Error('El CSV debe tener una columna "nombre" o "producto"');
+            const result = [];
             for (let i = 1; i < lines.length; i++) {
                 const values = lines[i].split(',').map(v => v.trim());
+                if (values.length <= nameIdx) continue;
                 const name = values[nameIdx];
                 if (!name) continue;
                 let price = undefined;
@@ -1015,55 +835,47 @@
                     const num = parseFloat(values[priceIdx].replace(/[^\d.,-]/g, '').replace(',', '.'));
                     if (!isNaN(num)) price = num;
                 }
-                products.push({ id: Utils.generateId(), name, price });
+                result.push({ id: generateId(), name, price });
             }
-            return products;
+            return result;
         }
 
-        parseExcel(rows) {
-            if (rows.length < 2) return [];
-            const headers = rows[0].map(h => String(h).toLowerCase().trim());
-            const nameIdx = headers.findIndex(h => h.includes('nombre') || h === 'producto');
-            const priceIdx = headers.findIndex(h => h.includes('precio') || h.includes('importe'));
-            if (nameIdx === -1) throw new Error('Columna "nombre" no encontrada');
-
-            const products = [];
-            for (let i = 1; i < rows.length; i++) {
-                const row = rows[i];
-                if (!row || row.length === 0) continue;
-                const name = row[nameIdx] ? String(row[nameIdx]).trim() : '';
-                if (!name) continue;
-                let price = undefined;
-                if (priceIdx !== -1 && row[priceIdx] !== undefined) {
-                    const val = row[priceIdx];
-                    if (typeof val === 'number') price = val;
-                    else if (typeof val === 'string') {
-                        const num = parseFloat(val.replace(/[^\d.,-]/g, '').replace(',', '.'));
-                        if (!isNaN(num)) price = num;
-                    }
-                }
-                products.push({ id: Utils.generateId(), name, price });
-            }
-            return products;
+        function updateProducts(newProducts) {
+            products = newProducts;
+            saveToStorage();
+            renderProductsList();
+            updateProductDatalist();
+            resetDropZone('✅ Productos cargados correctamente');
         }
 
-        async handleImport(file) {
-            try {
-                const text = await file.text();
-                const data = JSON.parse(text);
-                if (data.customers) this.data.customers = data.customers;
-                if (data.products) this.data.products = data.products;
-                if (data.orders) this.data.orders = data.orders;
-                Store.save(this.data);
-                this.renderView(this.currentView);
-                this.toast.show('Restauración exitosa', 'success');
-            } catch {
-                this.toast.show('Archivo inválido', 'error');
-            }
+        function resetDropZone(message = '📂 Arrastrá o hacé clic para seleccionar archivo (CSV o Excel)') {
+            dropZone.innerHTML = message;
         }
 
-        exportBackup() {
-            const dataStr = JSON.stringify(this.data, null, 2);
+        dropZone.addEventListener('click', () => productFile.click());
+        dropZone.addEventListener('dragover', (e) => e.preventDefault());
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file) handleProductFile(file);
+        });
+        productFile.addEventListener('change', (e) => {
+            if (e.target.files[0]) handleProductFile(e.target.files[0]);
+        });
+
+        clearProductsBtn.addEventListener('click', () => {
+            if (confirm('¿Eliminar todos los productos?')) {
+                products = [];
+                saveToStorage();
+                renderProductsList();
+                updateProductDatalist();
+            }
+        });
+
+        // ---- Backup ----
+        exportBackupBtn.addEventListener('click', () => {
+            const backup = { customers, products, orders };
+            const dataStr = JSON.stringify(backup, null, 2);
             const blob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -1071,11 +883,54 @@
             a.download = `backup_${new Date().toISOString().slice(0,10)}.json`;
             a.click();
             URL.revokeObjectURL(url);
-        }
-    }
+        });
 
-    // Iniciar la aplicación
-    new App();
+        importZone.addEventListener('click', () => importFile.click());
+        importZone.addEventListener('dragover', (e) => e.preventDefault());
+        importZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file) handleImport(file);
+        });
+        importFile.addEventListener('change', (e) => {
+            if (e.target.files[0]) handleImport(e.target.files[0]);
+        });
+
+        function handleImport(file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    if (data.customers) customers = data.customers;
+                    if (data.products) products = data.products;
+                    if (data.orders) orders = data.orders;
+                    saveToStorage();
+                    alert('Restauración exitosa');
+                    const active = document.querySelector('.nav-btn.active')?.dataset.view || 'orders';
+                    setActiveView(active);
+                    updateProductDatalist();
+                } catch (err) {
+                    alert('Archivo inválido: ' + err);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // ---- Datalist de productos ----
+        const datalist = document.createElement('datalist');
+        datalist.id = 'productDatalist';
+        document.body.appendChild(datalist);
+        function updateProductDatalist() {
+            datalist.innerHTML = products.map(p => `<option value="${p.name}">${p.price ? '$'+p.price : ''}</option>`).join('');
+        }
+        updateProductDatalist();
+
+        // ---- Cerrar modal de imagen ----
+        document.querySelector('#imageModal .close').addEventListener('click', () => imageModal.style.display = 'none');
+
+        // ---- Inicializar vista ----
+        setActiveView('orders');
+    })();
 </script>
 </body>
 </html>
