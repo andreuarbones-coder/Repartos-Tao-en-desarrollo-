@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AdminRepartos (Firebase)</title>
+    <title>AdminRepartos (Firebase) - Móvil</title>
     <!-- SheetJS -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <!-- Firebase -->
@@ -11,7 +11,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
     <style>
-        /* Mismos estilos que antes, los dejo igual */
+        /* Estilos base (igual que antes) */
         * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; }
         body { background: #f4f6f9; padding: 1rem; min-height: 100vh; display: flex; justify-content: center; }
         #app { max-width: 1400px; width: 100%; background: white; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden; }
@@ -73,12 +73,142 @@
         .date-filter input { padding: 0.5rem; border-radius: 30px; border: 1px solid #d0d9e2; }
         .global-loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 3000; }
         .global-loader.hidden { display: none; }
+
+        /* --- Estilos responsive para móvil --- */
+        @media (max-width: 768px) {
+            header { flex-direction: column; align-items: stretch; padding: 1rem; }
+            header h1 { margin-right: 0; text-align: center; }
+            .nav-btn { text-align: center; }
+            .flex-row { flex-direction: column; align-items: stretch; }
+            .search-box, .filter-group, .date-filter { width: 100%; }
+            .filter-group select, .date-filter input { width: 100%; }
+            .form-grid { grid-template-columns: 1fr; }
+
+            /* Convertir tablas en tarjetas */
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            thead {
+                display: none;
+            }
+            tr {
+                background: white;
+                border-radius: 16px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+                margin-bottom: 1rem;
+                padding: 1rem;
+                border: 1px solid #eaeef2;
+            }
+            td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 0.5rem 0;
+                border: none;
+                border-bottom: 1px dashed #eaeef2;
+            }
+            td:last-child {
+                border-bottom: none;
+            }
+            td:before {
+                content: attr(data-label);
+                font-weight: 600;
+                color: #2c3e50;
+                width: 40%;
+                font-size: 0.9rem;
+            }
+            .actions-cell {
+                display: flex;
+                gap: 0.5rem;
+                justify-content: flex-end;
+                flex-wrap: wrap;
+            }
+            .actions-cell:before {
+                content: "Acciones";
+                font-weight: 600;
+                color: #2c3e50;
+            }
+            .badge {
+                display: inline-block;
+                margin-left: auto;
+            }
+            .product-list {
+                margin: 0;
+                padding-left: 1rem;
+            }
+            /* Modales */
+            .modal > div {
+                width: 95% !important;
+                padding: 1.5rem !important;
+            }
+            /* Botones más grandes */
+            button, .btn {
+                padding: 0.8rem 1.5rem;
+                font-size: 1rem;
+            }
+            .icon-btn {
+                padding: 0.5rem 0.8rem;
+                font-size: 1.4rem;
+            }
+            /* Ajustar inline-add */
+            .inline-add {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .inline-add button {
+                width: 100% !important;
+                border-radius: 30px !important;
+                height: auto;
+                padding: 0.6rem;
+            }
+            /* Product item en móvil */
+            .product-item {
+                flex-wrap: wrap;
+            }
+            .product-item input {
+                flex: 1 1 calc(50% - 0.5rem);
+            }
+            .product-item .remove-product {
+                width: 100%;
+                border-radius: 30px;
+                margin-top: 0.5rem;
+            }
+            /* Disminuir padding del main */
+            main {
+                padding: 1rem;
+            }
+            /* Menú de estado centrado */
+            .status-menu {
+                position: fixed !important;
+                top: 50% !important;
+                left: 50% !important;
+                transform: translate(-50%, -50%);
+                width: 90%;
+                max-width: 300px;
+                padding: 1rem;
+            }
+            .status-menu button {
+                padding: 1rem;
+                text-align: center;
+                font-size: 1.2rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            td:before {
+                width: 35%;
+                font-size: 0.8rem;
+            }
+            .product-item input {
+                flex: 1 1 100%;
+            }
+        }
     </style>
 </head>
 <body>
 <div id="app">
     <header>
-        <h1>📦 AdminRepartos (Firebase)</h1>
+        <h1>📦 AdminRepartos</h1>
         <button class="nav-btn" data-view="orders">📋 Pedidos</button>
         <button class="nav-btn" data-view="customers">👥 Clientes</button>
         <button class="nav-btn" data-view="products">📦 Productos</button>
@@ -93,10 +223,10 @@
                     <button id="newOrderBtn" class="secondary">➕ Nuevo pedido</button>
                 </div>
                 <div class="flex-row">
-                    <input type="text" id="searchOrders" class="search-box" placeholder="🔍 Buscar (cliente, teléfono, producto...)">
+                    <input type="text" id="searchOrders" class="search-box" placeholder="🔍 Buscar...">
                     <div class="filter-group">
                         <select id="statusFilter">
-                            <option value="todos">Todos los estados</option>
+                            <option value="todos">Todos</option>
                             <option value="pendiente">Pendiente</option>
                             <option value="entregado">Entregado</option>
                             <option value="incompleto">Incompleto</option>
@@ -119,24 +249,24 @@
             </div>
             <!-- Productos -->
             <div id="view-products">
-                <h2>📦 Productos (para autocompletado)</h2>
+                <h2>📦 Productos</h2>
                 <div class="card">
-                    <p style="margin-bottom:1rem">Subí un archivo CSV (columna "nombre") o Excel (XLSX, XLS) para cargar productos.</p>
+                    <p>Subí un archivo CSV o Excel para cargar productos.</p>
                     <div class="file-upload" id="dropZone">
-                        📂 Arrastrá o hacé clic para seleccionar archivo (CSV o Excel)
-                        <input type="file" id="productFile" accept=".csv, text/csv, .xls, .xlsx" style="display: none;">
+                        📂 Arrastrá o hacé clic
+                        <input type="file" id="productFile" accept=".csv, .xls, .xlsx" style="display: none;">
                     </div>
                     <div id="productList" style="margin-top:2rem"></div>
-                    <button id="clearProducts" class="secondary" style="margin-top:1rem">🗑️ Limpiar productos</button>
+                    <button id="clearProducts" class="secondary" style="margin-top:1rem">🗑️ Limpiar todos</button>
                 </div>
             </div>
             <!-- Backup -->
             <div id="view-backup">
                 <h2>💾 Respaldos</h2>
                 <div class="card">
-                    <button id="exportBackup" style="width:100%; margin-bottom:1rem">📥 Exportar datos (backup.json)</button>
+                    <button id="exportBackup" style="width:100%; margin-bottom:1rem">📥 Exportar backup</button>
                     <div class="file-upload" id="importZone">
-                        📂 Arrastrá o hacé clic para restaurar backup (JSON)
+                        📂 Restaurar backup (JSON)
                         <input type="file" id="importFile" accept=".json" style="display: none;">
                     </div>
                 </div>
@@ -145,8 +275,8 @@
     </main>
 </div>
 
-<!-- Modales (igual que antes) -->
-<div id="orderModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
+<!-- Modales (igual que antes, pero con clase modal para el CSS) -->
+<div id="orderModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
     <div style="background:white; border-radius:30px; width:90%; max-width:800px; max-height:90vh; overflow:auto; padding:2rem;">
         <h3 id="modalTitle">➕ Nuevo Pedido</h3>
         <form id="orderForm">
@@ -176,7 +306,7 @@
                 <div>
                     <div class="form-group">
                         <label>Comentarios</label>
-                        <textarea id="orderComments" placeholder="Notas del pedido..."></textarea>
+                        <textarea id="orderComments" placeholder="Notas..."></textarea>
                     </div>
                     <div class="form-group">
                         <label>Foto del ticket</label>
@@ -186,19 +316,19 @@
                 </div>
             </div>
             <fieldset style="border:1px solid #eaeef2; border-radius:20px; padding:1rem; margin:1rem 0;">
-                <legend>📦 Productos en el pedido</legend>
+                <legend>📦 Productos</legend>
                 <div id="productsContainer"></div>
-                <button type="button" id="addProductBtn" class="secondary" style="margin-top:0.5rem">➕ Agregar producto</button>
+                <button type="button" id="addProductBtn" class="secondary" style="margin-top:0.5rem">➕ Agregar</button>
             </fieldset>
             <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
                 <button type="button" id="cancelOrderBtn" class="secondary">Cancelar</button>
-                <button type="submit" id="saveOrderBtn">Guardar pedido</button>
+                <button type="submit" id="saveOrderBtn">Guardar</button>
             </div>
         </form>
     </div>
 </div>
 
-<div id="quickCustomerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1100;">
+<div id="quickCustomerModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1100;">
     <div style="background:white; border-radius:30px; width:90%; max-width:400px; padding:2rem;">
         <h3>➕ Cliente Rápido</h3>
         <form id="quickCustomerForm">
@@ -228,10 +358,10 @@
 
 <div id="imageModal" class="image-modal" style="display:none;" onclick="this.style.display='none'">
     <span class="close">&times;</span>
-    <img id="modalImage" src="" alt="Foto ticket">
+    <img id="modalImage" src="" alt="Foto">
 </div>
 
-<div id="customerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
+<div id="customerModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
     <div style="background:white; border-radius:30px; width:90%; max-width:500px; padding:2rem;">
         <h3 id="customerModalTitle">👤 Nuevo Cliente</h3>
         <form id="customerForm">
@@ -266,7 +396,7 @@
 
 <script>
     (function() {
-        // --- Configuración de Firebase (tus datos) ---
+        // --- Configuración de Firebase ---
         const firebaseConfig = {
             apiKey: "AIzaSyD4iPoxUkrOWdyWkMDnOSdoDJNg96SUKTs",
             authDomain: "repartos-tao.firebaseapp.com",
@@ -279,25 +409,20 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
-        // Persistencia offline
         db.enablePersistence({ synchronizeTabs: true }).catch(err => console.warn('Persistencia:', err));
 
-        // Colecciones
         const customersCol = db.collection('customers');
         const productsCol = db.collection('products');
         const ordersCol = db.collection('orders');
 
-        // Estado local
         let customers = [];
         let products = [];
         let orders = [];
 
-        // Loader
         const loader = document.getElementById('globalLoader');
         function showLoader() { loader.classList.remove('hidden'); }
         function hideLoader() { loader.classList.add('hidden'); }
 
-        // Carga inicial
         async function loadCustomers() {
             const snap = await customersCol.orderBy('name').get();
             customers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -324,7 +449,6 @@
             }
         }
 
-        // Suscripciones en tiempo real
         function subscribeToCustomers() {
             customersCol.orderBy('name').onSnapshot(() => loadCustomers().then(() => renderView(currentView)));
         }
@@ -340,7 +464,7 @@
             subscribeToOrders();
         }
 
-        // CRUD Clientes
+        // CRUD
         async function saveCustomer(cust) {
             showLoader();
             try {
@@ -369,8 +493,6 @@
                 hideLoader();
             }
         }
-
-        // CRUD Productos
         async function saveProduct(prod) {
             showLoader();
             try {
@@ -395,8 +517,6 @@
                 hideLoader();
             }
         }
-
-        // CRUD Pedidos
         async function saveOrder(order, file) {
             showLoader();
             try {
@@ -440,39 +560,36 @@
             }
         }
 
-        // --- IMPORTACIÓN DE PRODUCTOS (CORREGIDA PARA LOTES GRANDES) ---
+        // Importar productos (batch)
         async function importProducts(newProductsArray) {
             showLoader();
             const total = newProductsArray.length;
             if (total === 0) {
-                alert('No hay productos para importar');
+                alert('No hay productos');
                 hideLoader();
                 return;
             }
-
             const BATCH_LIMIT = 500;
             const batches = [];
             for (let i = 0; i < total; i += BATCH_LIMIT) {
                 const batch = db.batch();
                 const chunk = newProductsArray.slice(i, i + BATCH_LIMIT);
                 chunk.forEach(prod => {
-                    const docRef = productsCol.doc(); // ID automático
+                    const docRef = productsCol.doc();
                     batch.set(docRef, prod);
                 });
                 batches.push(batch.commit());
             }
-
             try {
                 await Promise.all(batches);
-                alert(`✅ ${total} productos importados correctamente`);
+                alert(`✅ ${total} productos importados`);
             } catch (e) {
                 console.error('Error importando:', e);
-                alert('❌ Error al importar productos. Revisá la consola.');
+                alert('❌ Error al importar');
             } finally {
                 hideLoader();
             }
         }
-
         async function clearAllProducts() {
             if (!confirm('¿Eliminar TODOS los productos?')) return;
             showLoader();
@@ -483,7 +600,7 @@
                 await batch.commit();
             } catch (e) {
                 console.error(e);
-                alert('Error limpiando productos');
+                alert('Error limpiando');
             } finally {
                 hideLoader();
             }
@@ -522,14 +639,12 @@
                 const text = await file.text();
                 const data = JSON.parse(text);
                 const batch = db.batch();
-                // Borrar todo
                 const [custSnap, prodSnap, orderSnap] = await Promise.all([
                     customersCol.get(), productsCol.get(), ordersCol.get()
                 ]);
                 custSnap.docs.forEach(d => batch.delete(d.ref));
                 prodSnap.docs.forEach(d => batch.delete(d.ref));
                 orderSnap.docs.forEach(d => batch.delete(d.ref));
-                // Agregar nuevos
                 data.customers?.forEach(c => batch.set(customersCol.doc(c.id || undefined), c));
                 data.products?.forEach(p => batch.set(productsCol.doc(p.id || undefined), p));
                 data.orders?.forEach(o => batch.set(ordersCol.doc(o.id || undefined), o));
@@ -543,7 +658,7 @@
             }
         }
 
-        // ----- Referencias DOM -----
+        // Referencias DOM
         const navBtns = document.querySelectorAll('.nav-btn');
         const newOrderBtn = document.getElementById('newOrderBtn');
         const searchOrders = document.getElementById('searchOrders');
@@ -561,7 +676,6 @@
         const importZone = document.getElementById('importZone');
         const importFile = document.getElementById('importFile');
 
-        // Modales
         const orderModal = document.getElementById('orderModal');
         const quickCustomerModal = document.getElementById('quickCustomerModal');
         const customerModal = document.getElementById('customerModal');
@@ -616,7 +730,7 @@
             if (view === 'products') renderProductsList();
         }
 
-        // --- Renderizados (igual que antes pero usando datos locales) ---
+        // --- Renderizados con data-label para móvil ---
         function renderOrders() {
             const filterText = searchOrders.value.toLowerCase();
             const filterStatus = statusFilter.value;
@@ -645,18 +759,19 @@
                 const c = customers.find(c => c.id === o.customerId) || { name: '?' };
                 const itemsHtml = o.items.map(i => `<li>${i.productName} x${i.quantity} ($${i.price})</li>`).join('');
                 html += `<tr>
-                    <td>${o.date ? new Date(o.date).toLocaleString() : ''}</td>
-                    <td>${c.name}</td>
-                    <td><span class="badge ${o.status}" data-order-id="${o.id}">${o.status}</span>
+                    <td data-label="Fecha">${o.date ? new Date(o.date).toLocaleString() : ''}</td>
+                    <td data-label="Cliente">${c.name}</td>
+                    <td data-label="Estado">
+                        <span class="badge ${o.status}" data-order-id="${o.id}">${o.status}</span>
                         <div class="status-menu" id="status-menu-${o.id}">
                             <button data-status="pendiente">Pendiente</button>
                             <button data-status="entregado">Entregado</button>
                             <button data-status="incompleto">Incompleto</button>
                         </div>
                     </td>
-                    <td><ul class="product-list">${itemsHtml}</ul></td>
-                    <td>${o.comments || ''}</td>
-                    <td class="actions-cell">
+                    <td data-label="Productos"><ul class="product-list">${itemsHtml}</ul></td>
+                    <td data-label="Comentarios">${o.comments || ''}</td>
+                    <td class="actions-cell" data-label="Acciones">
                         <button class="icon-btn edit-order" data-id="${o.id}">✏️</button>
                         <button class="icon-btn delete-order" data-id="${o.id}">🗑️</button>
                         ${o.ticketPhoto ? `<button class="icon-btn view-photo" data-photo="${o.ticketPhoto}">📷</button>` : ''}
@@ -666,7 +781,7 @@
             html += '</tbody></table>';
             ordersListDiv.innerHTML = html;
 
-            // Eventos (delegación simple, pero por ahora así)
+            // Eventos
             document.querySelectorAll('.edit-order').forEach(btn => btn.addEventListener('click', e => {
                 e.stopPropagation();
                 openOrderModal(btn.dataset.id);
@@ -713,11 +828,11 @@
             let html = '<table><thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Email</th><th>Acciones</th></tr></thead><tbody>';
             customers.forEach(c => {
                 html += `<tr>
-                    <td>${c.name}</td>
-                    <td>${c.phone || ''}</td>
-                    <td>${c.address || ''}</td>
-                    <td>${c.email || ''}</td>
-                    <td class="actions-cell">
+                    <td data-label="Nombre">${c.name}</td>
+                    <td data-label="Teléfono">${c.phone || ''}</td>
+                    <td data-label="Dirección">${c.address || ''}</td>
+                    <td data-label="Email">${c.email || ''}</td>
+                    <td class="actions-cell" data-label="Acciones">
                         <button class="icon-btn edit-customer" data-id="${c.id}">✏️</button>
                         <button class="icon-btn delete-customer" data-id="${c.id}">🗑️</button>
                     </td>
@@ -743,9 +858,9 @@
             let html = '<table><thead><tr><th>Nombre</th><th>Precio</th><th>Acciones</th></tr></thead><tbody>';
             products.slice(0, 100).forEach(p => {
                 html += `<tr>
-                    <td>${p.name}</td>
-                    <td>${p.price ? '$' + p.price : '-'}</td>
-                    <td class="actions-cell">
+                    <td data-label="Nombre">${p.name}</td>
+                    <td data-label="Precio">${p.price ? '$' + p.price : '-'}</td>
+                    <td class="actions-cell" data-label="Acciones">
                         <button class="icon-btn edit-product" data-id="${p.id}">✏️</button>
                         <button class="icon-btn delete-product" data-id="${p.id}">🗑️</button>
                     </td>
@@ -764,10 +879,9 @@
             }));
         }
 
-        // Modales y funciones auxiliares
+        // Funciones de modales (sin cambios importantes)
         function openProductModal(id) {
-            // Por ahora no implementado, podrías agregar después
-            alert('Edición individual de producto no implementada. Usá Excel para cargar.');
+            alert('Edición individual no implementada. Usá Excel.');
         }
 
         function openOrderModal(id) {
@@ -922,7 +1036,7 @@
         dateFrom.addEventListener('change', renderOrders);
         dateTo.addEventListener('change', renderOrders);
 
-        // --- Manejador de archivo de productos (CORREGIDO) ---
+        // Manejador de archivo de productos
         function handleProductFile(file) {
             const reader = new FileReader();
             const ext = file.name.split('.').pop().toLowerCase();
@@ -1026,7 +1140,7 @@
         }
 
         function resetDropZone(msg) {
-            dropZone.innerHTML = msg || '📂 Arrastrá o hacé clic para seleccionar archivo (CSV o Excel)';
+            dropZone.innerHTML = msg || '📂 Arrastrá o hacé clic para seleccionar archivo';
             dropZone.style.pointerEvents = 'auto';
         }
 
@@ -1052,7 +1166,6 @@
             if (e.target.files[0]) importBackup(e.target.files[0]);
         });
 
-        // Datalist
         const datalist = document.createElement('datalist');
         datalist.id = 'productDatalist';
         document.body.appendChild(datalist);
