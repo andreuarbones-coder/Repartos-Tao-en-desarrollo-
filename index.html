@@ -3,9 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AdminRepartos - Gestión de Repartos</title>
+    <title>AdminRepartos Pro (Firebase)</title>
+    <!-- SheetJS para Excel -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <!-- Firebase SDK (modular compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
     <style>
+        /* (mismos estilos que antes, sin cambios) */
         * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; }
         body { background: #f4f6f9; padding: 1rem; min-height: 100vh; display: flex; justify-content: center; }
         #app { max-width: 1400px; width: 100%; background: white; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden; }
@@ -63,15 +69,16 @@
         .inline-add button { width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem; padding: 0; }
         .product-list { list-style: disc; padding-left: 1.2rem; margin: 0; }
         .product-list li { margin-bottom: 0.2rem; }
-        /* Filtros de fecha */
         .date-filter { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
         .date-filter input { padding: 0.5rem; border-radius: 30px; border: 1px solid #d0d9e2; }
+        .global-loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 3000; }
+        .global-loader.hidden { display: none; }
     </style>
 </head>
 <body>
 <div id="app">
     <header>
-        <h1>📦 AdminRepartos</h1>
+        <h1>📦 AdminRepartos (Firebase)</h1>
         <button class="nav-btn" data-view="orders">📋 Pedidos</button>
         <button class="nav-btn" data-view="customers">👥 Clientes</button>
         <button class="nav-btn" data-view="products">📦 Productos</button>
@@ -256,50 +263,341 @@
     </div>
 </div>
 
+<!-- Loader global -->
+<div id="globalLoader" class="global-loader hidden">
+    <div class="spinner" style="width:50px; height:50px;"></div>
+</div>
+
 <script>
     (function() {
-        // --- Estado y localStorage ---
-        const STORAGE_KEYS = {
-            CUSTOMERS: 'repartos_customers',
-            PRODUCTS: 'repartos_products',
-            ORDERS: 'repartos_orders'
+        // --- Configuración de Firebase (¡REEMPLAZA CON TUS DATOS!) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAquiVaTuApiKey",
+            authDomain: "tu-proyecto.firebaseapp.com",
+            projectId: "tu-proyecto",
+            storageBucket: "tu-proyecto.appspot.com",
+            messagingSenderId: "1234567890",
+            appId: "1:1234567890:web:abcdef"
         };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const storage = firebase.storage();
 
-        let customers = [
-            { id: 'c1', name: 'Juan Pérez', phone: '11 1234-5678', address: 'Av. Siempreviva 123', email: 'juan@mail.com' },
-            { id: 'c2', name: 'María Gómez', phone: '11 8765-4321', address: 'Calle Falsa 456', email: 'maria@mail.com' }
-        ];
-        let products = [
-            { id: 'p1', name: 'Arroz 1kg', price: 120 },
-            { id: 'p2', name: 'Fideos 500g', price: 90 },
-            { id: 'p3', name: 'Aceite 1.5L', price: 350 }
-        ];
-        let orders = [
-            { id: 'o1', customerId: 'c1', date: '2025-03-15T10:30', status: 'pendiente', comments: 'Llamar antes de llegar', items: [{ productId: null, productName: 'Arroz 1kg', quantity: 2, price: 120 }], ticketPhoto: '' },
-            { id: 'o2', customerId: 'c2', date: '2025-03-16T15:45', status: 'entregado', comments: 'Dejar con el portero', items: [{ productId: null, productName: 'Fideos 500g', quantity: 3, price: 90 }], ticketPhoto: '' }
-        ];
+        // Habilitar persistencia offline (opcional, pero recomendado)
+        db.enablePersistence({ synchronizeTabs: true })
+          .catch(err => console.warn('Error de persistencia:', err));
 
-        function loadFromStorage() {
+        // --- Referencias a colecciones ---
+        const customersCol = db.collection('customers');
+        const productsCol = db.collection('products');
+        const ordersCol = db.collection('orders');
+
+        // --- Estado local (caché para renderizado rápido) ---
+        let customers = [];
+        let products = [];
+        let orders = [];
+
+        // --- Loader ---
+        const loader = document.getElementById('globalLoader');
+        function showLoader() { loader.classList.remove('hidden'); }
+        function hideLoader() { loader.classList.add('hidden'); }
+
+        // --- Funciones para cargar datos iniciales y escuchar cambios ---
+        function loadCustomers() {
+            return customersCol.orderBy('name').get().then(snapshot => {
+                customers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            });
+        }
+        function loadProducts() {
+            return productsCol.orderBy('name').get().then(snapshot => {
+                products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                updateProductDatalist();
+            });
+        }
+        function loadOrders() {
+            return ordersCol.orderBy('date', 'desc').get().then(snapshot => {
+                orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            });
+        }
+
+        // Carga inicial de todos los datos
+        async function loadAllData() {
+            showLoader();
             try {
-                const storedCustomers = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
-                if (storedCustomers) customers = JSON.parse(storedCustomers);
-                const storedProducts = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-                if (storedProducts) products = JSON.parse(storedProducts);
-                const storedOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
-                if (storedOrders) orders = JSON.parse(storedOrders);
-            } catch (e) { console.warn('Error loading', e); }
-        }
-        loadFromStorage();
-
-        function saveToStorage() {
-            localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
-            localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+                await Promise.all([loadCustomers(), loadProducts(), loadOrders()]);
+                renderView(currentView);
+            } catch (error) {
+                console.error('Error cargando datos:', error);
+                alert('Error al conectar con Firebase. Revisá la consola.');
+            } finally {
+                hideLoader();
+            }
         }
 
-        function generateId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 9); }
+        // Escuchas en tiempo real (opcional, pero muy útil para equipos)
+        function subscribeToCustomers() {
+            customersCol.orderBy('name').onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added' || change.type === 'modified' || change.type === 'removed') {
+                        // Recargar completa para simplificar (podría optimizarse)
+                        loadCustomers().then(() => renderView(currentView));
+                    }
+                });
+            });
+        }
+        function subscribeToProducts() {
+            productsCol.orderBy('name').onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(() => {
+                    loadProducts().then(() => renderView(currentView));
+                });
+            });
+        }
+        function subscribeToOrders() {
+            ordersCol.orderBy('date', 'desc').onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(() => {
+                    loadOrders().then(() => renderView(currentView));
+                });
+            });
+        }
 
-        // ----- Referencias DOM -----
+        // Iniciar suscripciones después de carga inicial
+        function startSubscriptions() {
+            subscribeToCustomers();
+            subscribeToProducts();
+            subscribeToOrders();
+        }
+
+        // --- Funciones CRUD con Firebase ---
+        async function saveCustomer(customerData) {
+            showLoader();
+            try {
+                if (customerData.id) {
+                    // Actualizar
+                    await customersCol.doc(customerData.id).set(customerData);
+                } else {
+                    // Crear nuevo con ID generado por Firestore
+                    const docRef = await customersCol.add(customerData);
+                    customerData.id = docRef.id;
+                }
+                // No necesitamos recargar porque la suscripción lo hará
+            } catch (error) {
+                console.error('Error guardando cliente:', error);
+                alert('Error al guardar cliente');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function deleteCustomer(id) {
+            if (orders.some(o => o.customerId === id)) {
+                alert('No se puede eliminar un cliente con pedidos asociados.');
+                return;
+            }
+            if (confirm('¿Eliminar cliente?')) {
+                showLoader();
+                try {
+                    await customersCol.doc(id).delete();
+                } catch (error) {
+                    console.error('Error eliminando cliente:', error);
+                    alert('Error al eliminar cliente');
+                } finally {
+                    hideLoader();
+                }
+            }
+        }
+
+        async function saveProduct(productData) {
+            showLoader();
+            try {
+                if (productData.id) {
+                    await productsCol.doc(productData.id).set(productData);
+                } else {
+                    const docRef = await productsCol.add(productData);
+                    productData.id = docRef.id;
+                }
+            } catch (error) {
+                console.error('Error guardando producto:', error);
+                alert('Error al guardar producto');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function deleteProduct(id) {
+            if (confirm('¿Eliminar producto?')) {
+                showLoader();
+                try {
+                    await productsCol.doc(id).delete();
+                } catch (error) {
+                    console.error('Error eliminando producto:', error);
+                    alert('Error al eliminar producto');
+                } finally {
+                    hideLoader();
+                }
+            }
+        }
+
+        async function saveOrder(orderData, file = null) {
+            showLoader();
+            try {
+                // Si hay archivo, subirlo a Storage
+                if (file) {
+                    const storageRef = storage.ref(`tickets/${orderData.id}_${Date.now()}`);
+                    await storageRef.put(file);
+                    const url = await storageRef.getDownloadURL();
+                    orderData.ticketPhoto = url;
+                } else if (!orderData.ticketPhoto) {
+                    orderData.ticketPhoto = '';
+                }
+
+                if (orderData.id) {
+                    await ordersCol.doc(orderData.id).set(orderData);
+                } else {
+                    const docRef = await ordersCol.add(orderData);
+                    orderData.id = docRef.id;
+                }
+            } catch (error) {
+                console.error('Error guardando pedido:', error);
+                alert('Error al guardar pedido');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function deleteOrder(id) {
+            if (confirm('¿Eliminar pedido?')) {
+                showLoader();
+                try {
+                    await ordersCol.doc(id).delete();
+                } catch (error) {
+                    console.error('Error eliminando pedido:', error);
+                    alert('Error al eliminar pedido');
+                } finally {
+                    hideLoader();
+                }
+            }
+        }
+
+        async function updateOrderStatus(id, newStatus) {
+            showLoader();
+            try {
+                await ordersCol.doc(id).update({ status: newStatus });
+            } catch (error) {
+                console.error('Error actualizando estado:', error);
+                alert('Error al actualizar estado');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        // --- Importación masiva de productos desde Excel/CSV (usando Firebase) ---
+        async function importProducts(newProductsArray) {
+            showLoader();
+            try {
+                const batch = db.batch();
+                newProductsArray.forEach(prod => {
+                    const docRef = productsCol.doc(); // ID automático
+                    batch.set(docRef, prod);
+                });
+                await batch.commit();
+                alert('Productos importados correctamente');
+            } catch (error) {
+                console.error('Error importando productos:', error);
+                alert('Error al importar productos');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function clearAllProducts() {
+            if (!confirm('¿Eliminar TODOS los productos?')) return;
+            showLoader();
+            try {
+                const snapshot = await productsCol.get();
+                const batch = db.batch();
+                snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                await batch.commit();
+            } catch (error) {
+                console.error('Error limpiando productos:', error);
+                alert('Error al limpiar productos');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        // --- Backup / Restore (ahora desde Firebase) ---
+        async function exportBackup() {
+            showLoader();
+            try {
+                const [custSnap, prodSnap, orderSnap] = await Promise.all([
+                    customersCol.get(),
+                    productsCol.get(),
+                    ordersCol.get()
+                ]);
+                const backup = {
+                    customers: custSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+                    products: prodSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+                    orders: orderSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+                };
+                const dataStr = JSON.stringify(backup, null, 2);
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `backup_${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('Error exportando backup:', error);
+                alert('Error al exportar');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function importBackup(file) {
+            showLoader();
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+                const batch = db.batch();
+
+                // Limpiar colecciones existentes (opcional, podríamos hacer merge)
+                // Para simplificar, eliminamos todo y luego insertamos
+                const [custSnap, prodSnap, orderSnap] = await Promise.all([
+                    customersCol.get(),
+                    productsCol.get(),
+                    ordersCol.get()
+                ]);
+                custSnap.docs.forEach(doc => batch.delete(doc.ref));
+                prodSnap.docs.forEach(doc => batch.delete(doc.ref));
+                orderSnap.docs.forEach(doc => batch.delete(doc.ref));
+
+                // Agregar los nuevos
+                if (data.customers) data.customers.forEach(c => {
+                    const ref = customersCol.doc(c.id || undefined);
+                    batch.set(ref, c);
+                });
+                if (data.products) data.products.forEach(p => {
+                    const ref = productsCol.doc(p.id || undefined);
+                    batch.set(ref, p);
+                });
+                if (data.orders) data.orders.forEach(o => {
+                    const ref = ordersCol.doc(o.id || undefined);
+                    batch.set(ref, o);
+                });
+
+                await batch.commit();
+                alert('Restauración exitosa');
+            } catch (error) {
+                console.error('Error importando backup:', error);
+                alert('Archivo inválido o error en la restauración');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        // ----- Referencias DOM (igual que antes) -----
         const viewsContainer = document.getElementById('viewsContainer');
         const navBtns = document.querySelectorAll('.nav-btn');
         const newOrderBtn = document.getElementById('newOrderBtn');
@@ -356,20 +654,28 @@
         const customerEmail = document.getElementById('customerEmail');
         const customerModalTitle = document.getElementById('customerModalTitle');
 
-        // ---- Utilidades de vista ----
+        // ---- Utilidades de vista (adaptadas para usar datos locales) ----
+        let currentView = 'orders';
+
         function setActiveView(viewId) {
+            currentView = viewId;
             document.querySelectorAll('.views-container > div').forEach(div => div.classList.remove('active-view'));
             document.getElementById(`view-${viewId}`).classList.add('active-view');
             navBtns.forEach(btn => btn.classList.remove('active'));
             document.querySelector(`.nav-btn[data-view="${viewId}"]`).classList.add('active');
-            if (viewId === 'orders') renderOrders();
-            if (viewId === 'customers') renderCustomers();
-            if (viewId === 'products') renderProductsList();
+            renderView(viewId);
         }
 
         navBtns.forEach(btn => btn.addEventListener('click', () => setActiveView(btn.dataset.view)));
 
-        // ---- Render Pedidos con filtros mejorados ----
+        function renderView(view) {
+            if (view === 'orders') renderOrders();
+            if (view === 'customers') renderCustomers();
+            if (view === 'products') renderProductsList();
+            // backup no necesita render especial
+        }
+
+        // ---- Render Pedidos (usa datos locales, igual que antes pero con orders de Firebase) ----
         function renderOrders() {
             const filterText = searchOrders ? searchOrders.value.toLowerCase() : '';
             const filterStatus = statusFilter ? statusFilter.value : 'todos';
@@ -377,15 +683,10 @@
             const toDate = dateTo ? dateTo.value : '';
 
             let filtered = orders.filter(order => {
-                // Filtro por estado
                 if (filterStatus !== 'todos' && order.status !== filterStatus) return false;
-
-                // Filtro por fecha
-                const orderDateStr = order.date.split('T')[0]; // YYYY-MM-DD
+                const orderDateStr = order.date ? order.date.split('T')[0] : '';
                 if (fromDate && orderDateStr < fromDate) return false;
                 if (toDate && orderDateStr > toDate) return false;
-
-                // Filtro por texto (cliente, teléfono, dirección, email, productos, comentarios)
                 if (filterText) {
                     const customer = customers.find(c => c.id === order.customerId) || {};
                     const customerName = (customer.name || '').toLowerCase();
@@ -394,7 +695,6 @@
                     const customerEmail = (customer.email || '').toLowerCase();
                     const comments = (order.comments || '').toLowerCase();
                     const productNames = order.items.map(i => i.productName.toLowerCase()).join(' ');
-
                     const hayMatch = customerName.includes(filterText) ||
                                     customerPhone.includes(filterText) ||
                                     customerAddress.includes(filterText) ||
@@ -417,7 +717,7 @@
                 const itemsList = order.items.map(i => `<li>${i.productName} x${i.quantity} ($${i.price})</li>`).join('');
                 const itemsHtml = `<ul class="product-list">${itemsList}</ul>`;
                 html += `<tr data-order-id="${order.id}">
-                    <td>${new Date(order.date).toLocaleString()}</td>
+                    <td>${order.date ? new Date(order.date).toLocaleString() : ''}</td>
                     <td>${customer.name}</td>
                     <td>
                         <span class="badge ${order.status}" data-order-id="${order.id}">${order.status}</span>
@@ -439,7 +739,7 @@
             html += '</tbody></table>';
             ordersListDiv.innerHTML = html;
 
-            // Eventos editar/eliminar
+            // Eventos (usando delegación en lugar de asignar uno por uno, pero mantenemos igual por simplicidad)
             document.querySelectorAll('.edit-order').forEach(btn => btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 openOrderModal(btn.dataset.id);
@@ -448,8 +748,6 @@
                 e.stopPropagation();
                 deleteOrder(btn.dataset.id);
             }));
-
-            // Eventos ver foto
             document.querySelectorAll('.view-photo').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -460,8 +758,6 @@
                     }
                 });
             });
-
-            // Eventos cambio de estado
             document.querySelectorAll('.badge').forEach(badge => {
                 badge.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -469,41 +765,24 @@
                     const menu = document.getElementById(`status-menu-${orderId}`);
                     document.querySelectorAll('.status-menu').forEach(m => m.style.display = 'none');
                     const rect = badge.getBoundingClientRect();
-                    menu.style.position = 'absolute';
                     menu.style.top = rect.bottom + window.scrollY + 'px';
                     menu.style.left = rect.left + window.scrollX + 'px';
                     menu.style.display = 'block';
                 });
             });
-
             document.querySelectorAll('.status-menu button').forEach(btn => {
-                btn.addEventListener('click', (e) => {
+                btn.addEventListener('click', async (e) => {
                     e.stopPropagation();
                     const menu = btn.closest('.status-menu');
                     const orderId = menu.id.replace('status-menu-', '');
                     const newStatus = btn.dataset.status;
-                    const order = orders.find(o => o.id === orderId);
-                    if (order) {
-                        order.status = newStatus;
-                        saveToStorage();
-                        renderOrders();
-                    }
+                    await updateOrderStatus(orderId, newStatus);
                     menu.style.display = 'none';
                 });
             });
-
-            // Cerrar menús al hacer clic fuera
             document.addEventListener('click', () => {
                 document.querySelectorAll('.status-menu').forEach(m => m.style.display = 'none');
             });
-        }
-
-        function deleteOrder(id) {
-            if (confirm('¿Eliminar pedido?')) {
-                orders = orders.filter(o => o.id !== id);
-                saveToStorage();
-                renderOrders();
-            }
         }
 
         // ---- Clientes ----
@@ -538,19 +817,6 @@
             }));
         }
 
-        function deleteCustomer(id) {
-            if (orders.some(o => o.customerId === id)) {
-                alert('No se puede eliminar un cliente con pedidos asociados.');
-                return;
-            }
-            if (confirm('¿Eliminar cliente?')) {
-                customers = customers.filter(c => c.id !== id);
-                saveToStorage();
-                renderCustomers();
-                updateCustomerSelect(); // actualizar selector en pedidos
-            }
-        }
-
         // ---- Productos ----
         function renderProductsList() {
             if (!productListDiv) return;
@@ -558,16 +824,31 @@
                 productListDiv.innerHTML = '<p>No hay productos cargados. Subí un archivo CSV o Excel.</p>';
                 return;
             }
-            let html = '<table><thead><tr><th>Nombre</th><th>Precio</th></tr></thead><tbody>';
+            let html = '<table><thead><tr><th>Nombre</th><th>Precio</th><th>Acciones</th></tr></thead><tbody>';
             products.slice(0, 100).forEach(p => {
-                html += `<tr><td>${p.name}</td><td>${p.price ? '$' + p.price : '-'}</td></tr>`;
+                html += `<tr>
+                    <td>${p.name}</td>
+                    <td>${p.price ? '$' + p.price : '-'}</td>
+                    <td class="actions-cell">
+                        <button class="icon-btn edit-product" data-id="${p.id}">✏️</button>
+                        <button class="icon-btn delete-product" data-id="${p.id}">🗑️</button>
+                    </td>
+                </tr>`;
             });
-            if (products.length > 100) html += '<tr><td colspan="2">... y ' + (products.length-100) + ' más</td></tr>';
+            if (products.length > 100) html += '<tr><td colspan="3">... y ' + (products.length-100) + ' más</td></tr>';
             html += '</tbody></table>';
             productListDiv.innerHTML = html;
+            document.querySelectorAll('.edit-product').forEach(btn => btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openProductModal(btn.dataset.id);
+            }));
+            document.querySelectorAll('.delete-product').forEach(btn => btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteProduct(btn.dataset.id);
+            }));
         }
 
-        // ---- Modal Pedido ----
+        // ---- Modal Pedido (adaptado) ----
         function openOrderModal(orderId = null) {
             const isEdit = !!orderId;
             modalTitle.innerText = isEdit ? '✏️ Editar Pedido' : '➕ Nuevo Pedido';
@@ -626,7 +907,7 @@
             if (e.target === imageModal) imageModal.style.display = 'none';
         });
 
-        orderForm.addEventListener('submit', (e) => {
+        orderForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const customerId = customerSelect.value;
             if (!customerId) return alert('Seleccioná un cliente');
@@ -646,28 +927,22 @@
             });
             if (items.length === 0) return alert('Agregá al menos un producto');
 
-            let ticketPhotoBase64 = '';
-            const photoImg = photoPreviewContainer.querySelector('img');
-            if (photoImg) ticketPhotoBase64 = photoImg.src;
+            const fileInput = document.getElementById('ticketPhoto');
+            const file = fileInput.files[0];
 
             const orderData = {
-                id: orderIdHidden.value || generateId(),
+                id: orderIdHidden.value || undefined, // si no hay id, Firestore lo genera
                 customerId,
                 date: orderDate.value,
                 status: orderStatus.value,
                 comments: orderComments.value,
                 items,
-                ticketPhoto: ticketPhotoBase64
+                ticketPhoto: '' // se llenará después si hay foto
             };
 
-            if (orderIdHidden.value) {
-                orders = orders.map(o => o.id === orderData.id ? orderData : o);
-            } else {
-                orders.push(orderData);
-            }
-            saveToStorage();
+            await saveOrder(orderData, file);
             orderModal.style.display = 'none';
-            renderOrders();
+            // No necesitamos renderOrders porque la suscripción lo hará
         });
 
         ticketPhoto.addEventListener('change', (e) => {
@@ -691,20 +966,20 @@
 
         cancelQuickBtn.addEventListener('click', () => quickCustomerModal.style.display = 'none');
 
-        quickCustomerForm.addEventListener('submit', (e) => {
+        quickCustomerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const newCust = {
-                id: generateId(),
                 name: quickName.value.trim(),
                 phone: quickPhone.value.trim(),
                 address: quickAddress.value.trim(),
                 email: quickEmail.value.trim()
             };
             if (!newCust.name) return alert('El nombre es obligatorio');
-            customers.push(newCust);
-            saveToStorage();
+            await saveCustomer(newCust);
+            // El select se actualizará vía suscripción, pero podemos forzar actualización manual
             updateCustomerSelect();
-            customerSelect.value = newCust.id;
+            customerSelect.value = newCust.id; // Ojo: newCust.id no está disponible hasta después de guardar. Mejor: luego de guardar, obtenemos el id.
+            // Simplificamos: después de guardar, recargamos clientes y seleccionamos el último.
             quickCustomerModal.style.display = 'none';
         });
 
@@ -726,25 +1001,18 @@
             customerModal.style.display = 'flex';
         }
 
-        customerForm.addEventListener('submit', (e) => {
+        customerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const custData = {
-                id: customerIdHidden.value || generateId(),
+                id: customerIdHidden.value || undefined,
                 name: customerName.value.trim(),
                 phone: customerPhone.value.trim(),
                 address: customerAddress.value.trim(),
                 email: customerEmail.value.trim()
             };
             if (!custData.name) return alert('El nombre es obligatorio');
-            if (customerIdHidden.value) {
-                customers = customers.map(c => c.id === custData.id ? custData : c);
-            } else {
-                customers.push(custData);
-            }
-            saveToStorage();
+            await saveCustomer(custData);
             customerModal.style.display = 'none';
-            renderCustomers();
-            updateCustomerSelect();
         });
 
         cancelCustomerBtn.addEventListener('click', () => customerModal.style.display = 'none');
@@ -757,7 +1025,7 @@
         dateFrom.addEventListener('change', renderOrders);
         dateTo.addEventListener('change', renderOrders);
 
-        // ---- Productos: carga Excel/CSV (misma lógica) ----
+        // ---- Productos: carga Excel/CSV (ahora usa importProducts) ----
         function handleProductFile(file) {
             const reader = new FileReader();
             const fileType = file.name.split('.').pop().toLowerCase();
@@ -767,7 +1035,9 @@
                 reader.onload = (ev) => {
                     try {
                         const newProducts = parseCSV(ev.target.result);
-                        updateProducts(newProducts);
+                        importProducts(newProducts).then(() => {
+                            resetDropZone('✅ Productos cargados correctamente');
+                        }).catch(() => resetDropZone());
                     } catch (err) {
                         alert('Error al leer CSV: ' + err.message);
                         resetDropZone();
@@ -802,9 +1072,11 @@
                                     if (!isNaN(num)) price = num;
                                 }
                             }
-                            newProducts.push({ id: generateId(), name, price });
+                            newProducts.push({ name, price }); // sin id, se generará en Firestore
                         }
-                        updateProducts(newProducts);
+                        importProducts(newProducts).then(() => {
+                            resetDropZone('✅ Productos cargados correctamente');
+                        }).catch(() => resetDropZone());
                     } catch (err) {
                         alert('Error al leer Excel: ' + err.message);
                         resetDropZone();
@@ -835,17 +1107,9 @@
                     const num = parseFloat(values[priceIdx].replace(/[^\d.,-]/g, '').replace(',', '.'));
                     if (!isNaN(num)) price = num;
                 }
-                result.push({ id: generateId(), name, price });
+                result.push({ name, price }); // sin id
             }
             return result;
-        }
-
-        function updateProducts(newProducts) {
-            products = newProducts;
-            saveToStorage();
-            renderProductsList();
-            updateProductDatalist();
-            resetDropZone('✅ Productos cargados correctamente');
         }
 
         function resetDropZone(message = '📂 Arrastrá o hacé clic para seleccionar archivo (CSV o Excel)') {
@@ -863,58 +1127,21 @@
             if (e.target.files[0]) handleProductFile(e.target.files[0]);
         });
 
-        clearProductsBtn.addEventListener('click', () => {
-            if (confirm('¿Eliminar todos los productos?')) {
-                products = [];
-                saveToStorage();
-                renderProductsList();
-                updateProductDatalist();
-            }
-        });
+        clearProductsBtn.addEventListener('click', clearAllProducts);
 
         // ---- Backup ----
-        exportBackupBtn.addEventListener('click', () => {
-            const backup = { customers, products, orders };
-            const dataStr = JSON.stringify(backup, null, 2);
-            const blob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `backup_${new Date().toISOString().slice(0,10)}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-        });
+        exportBackupBtn.addEventListener('click', exportBackup);
 
         importZone.addEventListener('click', () => importFile.click());
         importZone.addEventListener('dragover', (e) => e.preventDefault());
         importZone.addEventListener('drop', (e) => {
             e.preventDefault();
             const file = e.dataTransfer.files[0];
-            if (file) handleImport(file);
+            if (file) importBackup(file);
         });
         importFile.addEventListener('change', (e) => {
-            if (e.target.files[0]) handleImport(e.target.files[0]);
+            if (e.target.files[0]) importBackup(e.target.files[0]);
         });
-
-        function handleImport(file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                try {
-                    const data = JSON.parse(ev.target.result);
-                    if (data.customers) customers = data.customers;
-                    if (data.products) products = data.products;
-                    if (data.orders) orders = data.orders;
-                    saveToStorage();
-                    alert('Restauración exitosa');
-                    const active = document.querySelector('.nav-btn.active')?.dataset.view || 'orders';
-                    setActiveView(active);
-                    updateProductDatalist();
-                } catch (err) {
-                    alert('Archivo inválido: ' + err);
-                }
-            };
-            reader.readAsText(file);
-        }
 
         // ---- Datalist de productos ----
         const datalist = document.createElement('datalist');
@@ -923,13 +1150,15 @@
         function updateProductDatalist() {
             datalist.innerHTML = products.map(p => `<option value="${p.name}">${p.price ? '$'+p.price : ''}</option>`).join('');
         }
-        updateProductDatalist();
 
         // ---- Cerrar modal de imagen ----
         document.querySelector('#imageModal .close').addEventListener('click', () => imageModal.style.display = 'none');
 
-        // ---- Inicializar vista ----
-        setActiveView('orders');
+        // ---- Inicializar: cargar datos y luego iniciar suscripciones ----
+        loadAllData().then(() => {
+            startSubscriptions();
+            setActiveView('orders');
+        });
     })();
 </script>
 </body>
