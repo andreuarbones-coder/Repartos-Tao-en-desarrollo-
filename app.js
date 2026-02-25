@@ -36,14 +36,20 @@ window.addEventListener('error', function (e) {
         customers: [],
         products: [],
         orders: [],
-        currentView: 'orders'
+        currentView: 'orders',
+        // Para paginación
+        pagination: {
+            orders: { lastVisible: null, hasMore: true, pageSize: 50 },
+            customers: { lastVisible: null, hasMore: true, pageSize: 50 },
+            products: { lastVisible: null, hasMore: true, pageSize: 50 }
+        }
     };
 
     // --- Utilidades DOM ---
     const getEl = (id) => document.getElementById(id);
     const loader = getEl('globalLoader');
 
-    // Wrapper para operaciones asíncronas (Evita repetir try/catch y loader)
+    // Wrapper para operaciones asíncronas
     async function withLoader(actionMsg, asyncFunc) {
         if (loader) loader.classList.remove('hidden');
         try {
@@ -56,36 +62,98 @@ window.addEventListener('error', function (e) {
         }
     }
 
-    // --- Inicialización y Suscripciones (Optimizado) ---
-    function subscribeAndLoad() {
-        return Promise.all(['customers', 'products', 'orders'].map(collectionName => {
-            return new Promise((resolve) => {
-                let isFirstLoad = true;
-                let query = refs[collectionName];
+    // --- Inicialización y Suscripciones (carga inicial con límite) ---
+    function loadInitialData() {
+        return Promise.all([
+            loadMoreCustomers(true),
+            loadMoreProducts(true),
+            loadMoreOrders(true)
+        ]);
+    }
 
-                if (collectionName === 'orders') query = query.orderBy('date', 'desc');
-                else query = query.orderBy('name');
+    async function loadMoreOrders(reset = false) {
+        let query = refs.orders.orderBy('date', 'desc').limit(state.pagination.orders.pageSize);
+        if (!reset && state.pagination.orders.lastVisible) {
+            query = query.startAfter(state.pagination.orders.lastVisible);
+        }
+        const snap = await query.get();
+        const newOrders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        if (reset) {
+            state.orders = newOrders;
+        } else {
+            state.orders = [...state.orders, ...newOrders];
+        }
+        state.pagination.orders.lastVisible = snap.docs[snap.docs.length - 1];
+        state.pagination.orders.hasMore = snap.docs.length === state.pagination.orders.pageSize;
+        renderOrders();
+    }
 
-                query.onSnapshot(snap => {
-                    state[collectionName] = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    async function loadMoreCustomers(reset = false) {
+        let query = refs.customers.orderBy('name').limit(state.pagination.customers.pageSize);
+        if (!reset && state.pagination.customers.lastVisible) {
+            query = query.startAfter(state.pagination.customers.lastVisible);
+        }
+        const snap = await query.get();
+        const newCustomers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        if (reset) {
+            state.customers = newCustomers;
+        } else {
+            state.customers = [...state.customers, ...newCustomers];
+        }
+        state.pagination.customers.lastVisible = snap.docs[snap.docs.length - 1];
+        state.pagination.customers.hasMore = snap.docs.length === state.pagination.customers.pageSize;
+        renderCustomers();
+    }
 
-                    if (collectionName === 'products') updateProductDatalist();
+    async function loadMoreProducts(reset = false) {
+        let query = refs.products.orderBy('name').limit(state.pagination.products.pageSize);
+        if (!reset && state.pagination.products.lastVisible) {
+            query = query.startAfter(state.pagination.products.lastVisible);
+        }
+        const snap = await query.get();
+        const newProducts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        if (reset) {
+            state.products = newProducts;
+        } else {
+            state.products = [...state.products, ...newProducts];
+        }
+        state.pagination.products.lastVisible = snap.docs[snap.docs.length - 1];
+        state.pagination.products.hasMore = snap.docs.length === state.pagination.products.pageSize;
+        renderProductsList();
+        updateProductDatalist();
+    }
 
-                    // Solo renderizamos si es la vista actual
-                    if (state.currentView === collectionName) renderView(collectionName);
+    // Suscripciones en tiempo real (solo para escuchar cambios, pero no recargamos todo)
+    function subscribeToCustomers() {
+        refs.customers.orderBy('name').onSnapshot(snap => {
+            // Solo actualizamos si hay cambios en los documentos que ya tenemos o si es necesario
+            // Por simplicidad, recargamos los primeros 50
+            loadMoreCustomers(true);
+        }, err => console.error('Error en suscripción customers:', err));
+    }
 
-                    if (isFirstLoad) {
-                        isFirstLoad = false;
-                        resolve();
-                    }
-                }, err => console.error(`Error en suscripción de ${collectionName}:`, err));
-            });
-        }));
+    function subscribeToProducts() {
+        refs.products.orderBy('name').onSnapshot(snap => {
+            loadMoreProducts(true);
+        }, err => console.error('Error en suscripción products:', err));
+    }
+
+    function subscribeToOrders() {
+        refs.orders.orderBy('date', 'desc').onSnapshot(snap => {
+            loadMoreOrders(true);
+        }, err => console.error('Error en suscripción orders:', err));
+    }
+
+    function startSubscriptions() {
+        subscribeToCustomers();
+        subscribeToProducts();
+        subscribeToOrders();
     }
 
     async function initApp() {
         await withLoader('Cargando datos iniciales', async () => {
-            await subscribeAndLoad();
+            await loadInitialData();
+            startSubscriptions();
             setActiveView('orders');
         });
     }
@@ -111,7 +179,7 @@ window.addEventListener('error', function (e) {
         else if (view === 'products') renderProductsList();
     }
 
-    // --- Render Orders ---
+    // --- Render Orders con botón "Cargar más" ---
     function renderOrders() {
         const ordersListDiv = getEl('ordersList');
         if (!ordersListDiv) return;
@@ -121,7 +189,8 @@ window.addEventListener('error', function (e) {
         const from = getEl('dateFrom')?.value || '';
         const to = getEl('dateTo')?.value || '';
 
-        const filtered = state.orders.filter(o => {
+        // Aplicar filtros sobre los pedidos cargados
+        let filtered = state.orders.filter(o => {
             if (filterStatus !== 'todos' && o.status !== filterStatus) return false;
             const d = o.date ? o.date.split('T')[0] : '';
             if (from && d < from) return false;
@@ -159,15 +228,27 @@ window.addEventListener('error', function (e) {
                 <td class="actions-cell" data-label="Acciones">
                     <button class="icon-btn" data-action="edit-order" data-id="${o.id}">✏️</button>
                     <button class="icon-btn" data-action="delete-order" data-id="${o.id}">🗑️</button>
-                    ${o.ticketPhoto ? `<button class="icon-btn" data-action="view-photo" data-photo="${o.ticketPhoto}">📷</button>` : ''}
+                    ${o.ticketPhoto ? `<button class="icon-btn" data-action="view-file" data-file-url="${o.ticketPhoto}">📎</button>` : ''}
                 </td>
             </tr>`;
         });
         html += '</tbody></table>';
+
+        // Botón "Cargar más" si hay más
+        if (state.pagination.orders.hasMore) {
+            html += '<div style="text-align: center; margin: 1rem 0;"><button id="loadMoreOrdersBtn" class="secondary">Cargar más pedidos</button></div>';
+        }
+
         ordersListDiv.innerHTML = html;
+
+        // Evento para cargar más
+        const loadMoreBtn = getEl('loadMoreOrdersBtn');
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', () => loadMoreOrders(false));
+        }
     }
 
-    // --- Render Customers ---
+    // --- Render Customers con botón "Cargar más" ---
     function renderCustomers() {
         const customersListDiv = getEl('customersList');
         if (!customersListDiv) return;
@@ -176,6 +257,7 @@ window.addEventListener('error', function (e) {
             customersListDiv.innerHTML = '<p class="card">No hay clientes.</p>';
             return;
         }
+
         let html = '<table><thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Email</th><th>Acciones</th></tr></thead><tbody>';
         state.customers.forEach(c => {
             html += `<tr>
@@ -190,10 +272,20 @@ window.addEventListener('error', function (e) {
             </tr>`;
         });
         html += '</tbody></table>';
+
+        if (state.pagination.customers.hasMore) {
+            html += '<div style="text-align: center; margin: 1rem 0;"><button id="loadMoreCustomersBtn" class="secondary">Cargar más clientes</button></div>';
+        }
+
         customersListDiv.innerHTML = html;
+
+        const loadMoreBtn = getEl('loadMoreCustomersBtn');
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', () => loadMoreCustomers(false));
+        }
     }
 
-    // --- Render Products ---
+    // --- Render Products con botón "Cargar más" ---
     function renderProductsList() {
         const productListDiv = getEl('productList');
         if (!productListDiv) return;
@@ -202,8 +294,9 @@ window.addEventListener('error', function (e) {
             productListDiv.innerHTML = '<p>No hay productos cargados.</p>';
             return;
         }
+
         let html = '<table><thead><tr><th>Nombre</th><th>Precio</th><th>Acciones</th></tr></thead><tbody>';
-        state.products.slice(0, 100).forEach(p => {
+        state.products.forEach(p => {
             html += `<tr>
                 <td data-label="Nombre">${p.name}</td>
                 <td data-label="Precio">${p.price ? '$' + p.price : '-'}</td>
@@ -212,9 +305,18 @@ window.addEventListener('error', function (e) {
                 </td>
             </tr>`;
         });
-        if (state.products.length > 100) html += `<tr><td colspan="3">... y ${state.products.length - 100} más</td></tr>`;
         html += '</tbody></table>';
+
+        if (state.pagination.products.hasMore) {
+            html += '<div style="text-align: center; margin: 1rem 0;"><button id="loadMoreProductsBtn" class="secondary">Cargar más productos</button></div>';
+        }
+
         productListDiv.innerHTML = html;
+
+        const loadMoreBtn = getEl('loadMoreProductsBtn');
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', () => loadMoreProducts(false));
+        }
     }
 
     function updateProductDatalist() {
@@ -227,7 +329,7 @@ window.addEventListener('error', function (e) {
         datalist.innerHTML = state.products.map(p => `<option value="${p.name}">${p.price ? '$' + p.price : ''}</option>`).join('');
     }
 
-    // --- Delegación de Eventos Global (Mejora de Performance) ---
+    // --- Delegación de Eventos Global (incluye view-file) ---
     document.addEventListener('click', async e => {
         const target = e.target;
 
@@ -242,6 +344,7 @@ window.addEventListener('error', function (e) {
 
         const action = actionBtn.dataset.action;
         const id = actionBtn.dataset.id;
+        const fileUrl = actionBtn.dataset.fileUrl;
 
         switch (action) {
             case 'edit-order':
@@ -249,13 +352,9 @@ window.addEventListener('error', function (e) {
             case 'delete-order':
                 if (confirm('¿Eliminar pedido?')) await withLoader('Eliminando pedido', () => refs.orders.doc(id).delete());
                 break;
-            case 'view-photo':
-                const modalImage = getEl('modalImage');
-                const imageModal = getEl('imageModal');
-                if (modalImage && imageModal) {
-                    modalImage.src = actionBtn.dataset.photo;
-                    imageModal.style.display = 'flex';
-                }
+            case 'view-file':
+                // Abrir modal con visor de archivo (imagen o PDF)
+                openFileModal(fileUrl);
                 break;
             case 'toggle-status':
                 const menu = getEl(`status-menu-${id}`);
@@ -290,7 +389,37 @@ window.addEventListener('error', function (e) {
         }
     });
 
-    // --- Funciones de Formulario (Modales) ---
+    // --- Función para abrir modal de archivo (imagen o PDF) ---
+    function openFileModal(fileUrl) {
+        const modal = getEl('fileModal');
+        if (!modal) {
+            // Crear modal si no existe
+            const modalDiv = document.createElement('div');
+            modalDiv.id = 'fileModal';
+            modalDiv.className = 'image-modal'; // reusamos la clase image-modal
+            modalDiv.innerHTML = `
+                <span class="close">&times;</span>
+                <div id="fileModalContent" style="width:90%; height:90%; display:flex; justify-content:center; align-items:center;"></div>
+            `;
+            document.body.appendChild(modalDiv);
+            modalDiv.querySelector('.close').addEventListener('click', () => modalDiv.style.display = 'none');
+            modalDiv.addEventListener('click', (e) => {
+                if (e.target === modalDiv) modalDiv.style.display = 'none';
+            });
+        }
+        const modalDiv = getEl('fileModal');
+        const contentDiv = getEl('fileModalContent');
+        const isPdf = fileUrl.toLowerCase().endsWith('.pdf');
+
+        if (isPdf) {
+            contentDiv.innerHTML = `<iframe src="${fileUrl}" style="width:100%; height:100%; border:none;" title="PDF Viewer"></iframe>`;
+        } else {
+            contentDiv.innerHTML = `<img src="${fileUrl}" style="max-width:100%; max-height:100%; object-fit:contain;">`;
+        }
+        modalDiv.style.display = 'flex';
+    }
+
+    // --- Funciones de Formulario (Modales) (sin cambios) ---
     function openOrderModal(id) {
         const orderForm = getEl('orderForm');
         orderForm.reset();
@@ -379,12 +508,12 @@ window.addEventListener('error', function (e) {
                 <button type="button" class="remove-file-btn" data-remove-file>Eliminar</button>
             `;
             container.appendChild(pdfDiv);
-            // Para poder ver el PDF, podríamos agregar un enlace "Ver PDF" que abra la URL en otra pestaña
-            const viewLink = document.createElement('a');
-            viewLink.href = url;
-            viewLink.target = '_blank';
+            // Para poder ver el PDF, agregamos un enlace que abra el modal
+            const viewLink = document.createElement('button');
             viewLink.textContent = 'Ver PDF';
+            viewLink.className = 'secondary';
             viewLink.style.marginLeft = '1rem';
+            viewLink.onclick = () => openFileModal(url);
             pdfDiv.appendChild(viewLink);
         } else if (file.type.startsWith('image/')) {
             const reader = new FileReader();
@@ -445,14 +574,12 @@ window.addEventListener('error', function (e) {
                 order.ticketPhoto = await ref.getDownloadURL();
             } else {
                 // Si no hay archivo, pero existe previsualización (porque no se tocó), mantener el existente.
-                // Si no hay previsualización, entonces no hay archivo.
                 const previewContainer = getEl('photoPreviewContainer');
                 if (previewContainer && previewContainer.children.length === 0) {
                     order.ticketPhoto = '';
                 } else {
                     // Si hay previsualización pero no es de un archivo nuevo, significa que es la existente.
                     // Ya la tenemos en order.ticketPhoto (del objeto order actual).
-                    // Solo la mantenemos.
                 }
             }
 
@@ -462,13 +589,22 @@ window.addEventListener('error', function (e) {
         });
     }
 
-    // Bindings estáticos (solo se asocian 1 vez)
+    // Bindings estáticos
     getEl('addProductBtn')?.addEventListener('click', () => addProductRow());
 
-    // Bindear filtros
+    // Bindear filtros con debounce para no recargar demasiado
+    const debouncedRenderOrders = debounce(renderOrders, 300);
     ['searchOrders', 'statusFilter', 'dateFrom', 'dateTo'].forEach(id => {
-        getEl(id)?.addEventListener('input', renderOrders);
+        getEl(id)?.addEventListener('input', debouncedRenderOrders);
     });
+
+    function debounce(func, wait) {
+        let timeout;
+        return function (...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
 
     // Cerrar modales (clic afuera)
     window.addEventListener('click', e => {
@@ -499,7 +635,6 @@ window.addEventListener('error', function (e) {
         if (!cust.name) return alert('Nombre obligatorio');
         await saveCustomer(cust);
         getEl('quickCustomerModal').style.display = 'none';
-        // Actualizar select de clientes en el modal de pedido (se actualizará por la suscripción)
     });
 
     // Botón nuevo cliente normal
