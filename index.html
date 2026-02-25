@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AdminRepartos (Firebase)</title>
-    <!-- Estilos -->
     <link rel="stylesheet" href="styles.css">
-    <!-- Librerías externas -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -23,7 +21,6 @@
     </header>
     <main>
         <div class="views-container" id="viewsContainer">
-            <!-- Pedidos -->
             <div id="view-orders" class="active-view">
                 <div class="flex-row">
                     <h2>📋 Lista de Pedidos</h2>
@@ -46,7 +43,6 @@
                 </div>
                 <div id="ordersList"></div>
             </div>
-            <!-- Clientes -->
             <div id="view-customers">
                 <div class="flex-row">
                     <h2>👥 Clientes</h2>
@@ -54,7 +50,6 @@
                 </div>
                 <div id="customersList"></div>
             </div>
-            <!-- Productos -->
             <div id="view-products">
                 <h2>📦 Productos</h2>
                 <div class="card">
@@ -67,7 +62,6 @@
                     <button id="clearProducts" class="secondary" style="margin-top:1rem">🗑️ Limpiar todos</button>
                 </div>
             </div>
-            <!-- Backup -->
             <div id="view-backup">
                 <h2>💾 Respaldos</h2>
                 <div class="card">
@@ -82,9 +76,8 @@
     </main>
 </div>
 
-<!-- Modales -->
-<div id="orderModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
-    <div style="background:white; border-radius:30px; width:90%; max-width:800px; max-height:90vh; overflow:auto; padding:2rem;">
+<div id="orderModal" class="modal" style="display:none;">
+    <div class="modal-content modal-content-lg">
         <h3 id="modalTitle">➕ Nuevo Pedido</h3>
         <form id="orderForm">
             <input type="hidden" id="orderId">
@@ -135,8 +128,8 @@
     </div>
 </div>
 
-<div id="quickCustomerModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1100;">
-    <div style="background:white; border-radius:30px; width:90%; max-width:400px; padding:2rem;">
+<div id="quickCustomerModal" class="modal modal-top" style="display:none; z-index: 1100;">
+    <div class="modal-content modal-content-sm">
         <h3>➕ Cliente Rápido</h3>
         <form id="quickCustomerForm">
             <div class="form-group">
@@ -163,13 +156,13 @@
     </div>
 </div>
 
-<div id="imageModal" class="image-modal" style="display:none;" onclick="this.style.display='none'">
+<div id="imageModal" class="image-modal" style="display:none;">
     <span class="close">&times;</span>
     <img id="modalImage" src="" alt="Foto">
 </div>
 
-<div id="customerModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
-    <div style="background:white; border-radius:30px; width:90%; max-width:500px; padding:2rem;">
+<div id="customerModal" class="modal" style="display:none;">
+    <div class="modal-content modal-content-md">
         <h3 id="customerModalTitle">👤 Nuevo Cliente</h3>
         <form id="customerForm">
             <input type="hidden" id="customerId">
@@ -201,7 +194,6 @@
     <div class="spinner" style="width:50px; height:50px;"></div>
 </div>
 
-<!-- Script principal -->
 <script src="app.js"></script>
 </body>
 </html>
