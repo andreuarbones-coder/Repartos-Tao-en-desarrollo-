@@ -1,399 +1,3 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AdminRepartos (Firebase) - Móvil</title>
-    <!-- SheetJS -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-    <!-- Firebase -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
-    <style>
-        /* Estilos base (igual que antes) */
-        * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; }
-        body { background: #f4f6f9; padding: 1rem; min-height: 100vh; display: flex; justify-content: center; }
-        #app { max-width: 1400px; width: 100%; background: white; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden; }
-        header { background: #1e2b3a; color: white; padding: 1rem 2rem; display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem; }
-        header h1 { font-size: 1.8rem; font-weight: 400; margin-right: auto; }
-        .nav-btn { background: transparent; border: none; color: #ccc; font-size: 1rem; padding: 0.5rem 1rem; cursor: pointer; border-radius: 30px; transition: 0.2s; }
-        .nav-btn:hover { background: #2c3e50; color: white; }
-        .nav-btn.active { background: #3b4e62; color: white; font-weight: 500; }
-        main { padding: 2rem; }
-        .views-container > div { display: none; }
-        .views-container > div.active-view { display: block; }
-        h2 { margin-bottom: 1.5rem; color: #1e2b3a; font-weight: 400; border-bottom: 2px solid #eaeef2; padding-bottom: 0.5rem; }
-        button, .btn { background: #1e2b3a; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 30px; font-size: 0.95rem; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
-        button:hover { background: #2c3e50; }
-        button.secondary { background: white; color: #1e2b3a; border: 1px solid #1e2b3a; }
-        button.secondary:hover { background: #f0f3f7; }
-        .card { background: white; border-radius: 16px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #eaeef2; margin-bottom: 2rem; }
-        .flex-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1.5rem; }
-        .search-box { flex: 1; min-width: 250px; padding: 0.7rem 1rem; border-radius: 30px; border: 1px solid #d0d9e2; font-size: 1rem; }
-        .filter-group { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
-        .filter-group input, .filter-group select { padding: 0.5rem 1rem; border-radius: 30px; border: 1px solid #d0d9e2; font-size: 0.95rem; }
-        table { width: 100%; border-collapse: collapse; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
-        th, td { padding: 1rem; text-align: left; border-bottom: 1px solid #eaeef2; vertical-align: top; }
-        th { background: #f8fafc; font-weight: 500; color: #2c3e50; }
-        tr:hover { background: #f9fcff; }
-        .badge { display: inline-block; padding: 0.25rem 0.8rem; border-radius: 30px; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: 0.2s; }
-        .badge.pendiente { background: #fff3cd; color: #856404; }
-        .badge.entregado { background: #d4edda; color: #155724; }
-        .badge.incompleto { background: #f8d7da; color: #721c24; }
-        .badge:hover { filter: brightness(0.95); }
-        .actions-cell { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-        .icon-btn { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; padding: 0.2rem 0.5rem; border-radius: 8px; line-height: 1; }
-        .icon-btn:hover { background: #e9ecef; }
-        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
-        .form-group { margin-bottom: 1rem; position: relative; }
-        .form-group label { display: block; margin-bottom: 0.3rem; font-weight: 500; color: #2c3e50; }
-        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.7rem 1rem; border-radius: 30px; border: 1px solid #d0d9e2; font-size: 1rem; }
-        .form-group textarea { border-radius: 16px; resize: vertical; min-height: 80px; }
-        .photo-preview { max-width: 150px; max-height: 150px; border-radius: 8px; border: 1px solid #ccc; margin-top: 0.5rem; }
-        .product-item { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
-        .product-item input { flex: 1; }
-        .remove-product { background: #f8d7da; color: #721c24; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer; }
-        .file-upload { border: 2px dashed #b8c5d0; border-radius: 30px; padding: 1.5rem; text-align: center; background: #fcfdff; cursor: pointer; }
-        .file-upload:hover { background: #f2f6fa; }
-        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #1e2b3a; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; margin-right: 8px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .status-menu { position: absolute; background: white; border-radius: 16px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); padding: 0.5rem; z-index: 100; display: none; }
-        .status-menu button { display: block; width: 100%; background: white; border: none; padding: 0.5rem 1rem; text-align: left; border-radius: 30px; margin: 2px 0; color: #1e2b3a; }
-        .status-menu button:hover { background: #f0f3f7; }
-        .image-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 2000; }
-        .image-modal img { max-width: 90%; max-height: 90%; border-radius: 8px; }
-        .image-modal .close { position: absolute; top: 20px; right: 30px; font-size: 2rem; color: white; cursor: pointer; }
-        .inline-add { display: flex; gap: 0.5rem; align-items: center; }
-        .inline-add select { flex: 1; }
-        .inline-add button { width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem; padding: 0; }
-        .product-list { list-style: disc; padding-left: 1.2rem; margin: 0; }
-        .product-list li { margin-bottom: 0.2rem; }
-        .date-filter { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-        .date-filter input { padding: 0.5rem; border-radius: 30px; border: 1px solid #d0d9e2; }
-        .global-loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 3000; }
-        .global-loader.hidden { display: none; }
-
-        /* --- Estilos responsive para móvil --- */
-        @media (max-width: 768px) {
-            header { flex-direction: column; align-items: stretch; padding: 1rem; }
-            header h1 { margin-right: 0; text-align: center; }
-            .nav-btn { text-align: center; }
-            .flex-row { flex-direction: column; align-items: stretch; }
-            .search-box, .filter-group, .date-filter { width: 100%; }
-            .filter-group select, .date-filter input { width: 100%; }
-            .form-grid { grid-template-columns: 1fr; }
-
-            /* Convertir tablas en tarjetas */
-            table, thead, tbody, th, td, tr {
-                display: block;
-            }
-            thead {
-                display: none;
-            }
-            tr {
-                background: white;
-                border-radius: 16px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-                margin-bottom: 1rem;
-                padding: 1rem;
-                border: 1px solid #eaeef2;
-            }
-            td {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 0.5rem 0;
-                border: none;
-                border-bottom: 1px dashed #eaeef2;
-            }
-            td:last-child {
-                border-bottom: none;
-            }
-            td:before {
-                content: attr(data-label);
-                font-weight: 600;
-                color: #2c3e50;
-                width: 40%;
-                font-size: 0.9rem;
-            }
-            .actions-cell {
-                display: flex;
-                gap: 0.5rem;
-                justify-content: flex-end;
-                flex-wrap: wrap;
-            }
-            .actions-cell:before {
-                content: "Acciones";
-                font-weight: 600;
-                color: #2c3e50;
-            }
-            .badge {
-                display: inline-block;
-                margin-left: auto;
-            }
-            .product-list {
-                margin: 0;
-                padding-left: 1rem;
-            }
-            /* Modales */
-            .modal > div {
-                width: 95% !important;
-                padding: 1.5rem !important;
-            }
-            /* Botones más grandes */
-            button, .btn {
-                padding: 0.8rem 1.5rem;
-                font-size: 1rem;
-            }
-            .icon-btn {
-                padding: 0.5rem 0.8rem;
-                font-size: 1.4rem;
-            }
-            /* Ajustar inline-add */
-            .inline-add {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .inline-add button {
-                width: 100% !important;
-                border-radius: 30px !important;
-                height: auto;
-                padding: 0.6rem;
-            }
-            /* Product item en móvil */
-            .product-item {
-                flex-wrap: wrap;
-            }
-            .product-item input {
-                flex: 1 1 calc(50% - 0.5rem);
-            }
-            .product-item .remove-product {
-                width: 100%;
-                border-radius: 30px;
-                margin-top: 0.5rem;
-            }
-            /* Disminuir padding del main */
-            main {
-                padding: 1rem;
-            }
-            /* Menú de estado centrado */
-            .status-menu {
-                position: fixed !important;
-                top: 50% !important;
-                left: 50% !important;
-                transform: translate(-50%, -50%);
-                width: 90%;
-                max-width: 300px;
-                padding: 1rem;
-            }
-            .status-menu button {
-                padding: 1rem;
-                text-align: center;
-                font-size: 1.2rem;
-            }
-        }
-
-        @media (max-width: 480px) {
-            td:before {
-                width: 35%;
-                font-size: 0.8rem;
-            }
-            .product-item input {
-                flex: 1 1 100%;
-            }
-        }
-    </style>
-</head>
-<body>
-<div id="app">
-    <header>
-        <h1>📦 AdminRepartos</h1>
-        <button class="nav-btn" data-view="orders">📋 Pedidos</button>
-        <button class="nav-btn" data-view="customers">👥 Clientes</button>
-        <button class="nav-btn" data-view="products">📦 Productos</button>
-        <button class="nav-btn" data-view="backup">💾 Backup</button>
-    </header>
-    <main>
-        <div class="views-container" id="viewsContainer">
-            <!-- Pedidos -->
-            <div id="view-orders" class="active-view">
-                <div class="flex-row">
-                    <h2>📋 Lista de Pedidos</h2>
-                    <button id="newOrderBtn" class="secondary">➕ Nuevo pedido</button>
-                </div>
-                <div class="flex-row">
-                    <input type="text" id="searchOrders" class="search-box" placeholder="🔍 Buscar...">
-                    <div class="filter-group">
-                        <select id="statusFilter">
-                            <option value="todos">Todos</option>
-                            <option value="pendiente">Pendiente</option>
-                            <option value="entregado">Entregado</option>
-                            <option value="incompleto">Incompleto</option>
-                        </select>
-                        <div class="date-filter">
-                            <input type="date" id="dateFrom" placeholder="Desde">
-                            <input type="date" id="dateTo" placeholder="Hasta">
-                        </div>
-                    </div>
-                </div>
-                <div id="ordersList"></div>
-            </div>
-            <!-- Clientes -->
-            <div id="view-customers">
-                <div class="flex-row">
-                    <h2>👥 Clientes</h2>
-                    <button id="newCustomerBtn" class="secondary">➕ Nuevo cliente</button>
-                </div>
-                <div id="customersList"></div>
-            </div>
-            <!-- Productos -->
-            <div id="view-products">
-                <h2>📦 Productos</h2>
-                <div class="card">
-                    <p>Subí un archivo CSV o Excel para cargar productos.</p>
-                    <div class="file-upload" id="dropZone">
-                        📂 Arrastrá o hacé clic
-                        <input type="file" id="productFile" accept=".csv, .xls, .xlsx" style="display: none;">
-                    </div>
-                    <div id="productList" style="margin-top:2rem"></div>
-                    <button id="clearProducts" class="secondary" style="margin-top:1rem">🗑️ Limpiar todos</button>
-                </div>
-            </div>
-            <!-- Backup -->
-            <div id="view-backup">
-                <h2>💾 Respaldos</h2>
-                <div class="card">
-                    <button id="exportBackup" style="width:100%; margin-bottom:1rem">📥 Exportar backup</button>
-                    <div class="file-upload" id="importZone">
-                        📂 Restaurar backup (JSON)
-                        <input type="file" id="importFile" accept=".json" style="display: none;">
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-</div>
-
-<!-- Modales (igual que antes, pero con clase modal para el CSS) -->
-<div id="orderModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
-    <div style="background:white; border-radius:30px; width:90%; max-width:800px; max-height:90vh; overflow:auto; padding:2rem;">
-        <h3 id="modalTitle">➕ Nuevo Pedido</h3>
-        <form id="orderForm">
-            <input type="hidden" id="orderId">
-            <div class="form-grid">
-                <div>
-                    <div class="form-group">
-                        <label>Cliente</label>
-                        <div class="inline-add">
-                            <select id="customerSelect" required></select>
-                            <button type="button" id="quickAddCustomerBtn" class="secondary" style="width:40px; height:40px; border-radius:50%;">➕</button>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Fecha</label>
-                        <input type="datetime-local" id="orderDate" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Estado</label>
-                        <select id="orderStatus">
-                            <option value="pendiente">Pendiente</option>
-                            <option value="entregado">Entregado</option>
-                            <option value="incompleto">Incompleto</option>
-                        </select>
-                    </div>
-                </div>
-                <div>
-                    <div class="form-group">
-                        <label>Comentarios</label>
-                        <textarea id="orderComments" placeholder="Notas..."></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>Foto del ticket</label>
-                        <input type="file" id="ticketPhoto" accept="image/*">
-                        <div id="photoPreviewContainer"></div>
-                    </div>
-                </div>
-            </div>
-            <fieldset style="border:1px solid #eaeef2; border-radius:20px; padding:1rem; margin:1rem 0;">
-                <legend>📦 Productos</legend>
-                <div id="productsContainer"></div>
-                <button type="button" id="addProductBtn" class="secondary" style="margin-top:0.5rem">➕ Agregar</button>
-            </fieldset>
-            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
-                <button type="button" id="cancelOrderBtn" class="secondary">Cancelar</button>
-                <button type="submit" id="saveOrderBtn">Guardar</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div id="quickCustomerModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1100;">
-    <div style="background:white; border-radius:30px; width:90%; max-width:400px; padding:2rem;">
-        <h3>➕ Cliente Rápido</h3>
-        <form id="quickCustomerForm">
-            <div class="form-group">
-                <label>Nombre *</label>
-                <input type="text" id="quickName" required>
-            </div>
-            <div class="form-group">
-                <label>Teléfono</label>
-                <input type="text" id="quickPhone">
-            </div>
-            <div class="form-group">
-                <label>Dirección</label>
-                <input type="text" id="quickAddress">
-            </div>
-            <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="quickEmail">
-            </div>
-            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:1.5rem;">
-                <button type="button" id="cancelQuickBtn" class="secondary">Cancelar</button>
-                <button type="submit" id="saveQuickBtn">Guardar y usar</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div id="imageModal" class="image-modal" style="display:none;" onclick="this.style.display='none'">
-    <span class="close">&times;</span>
-    <img id="modalImage" src="" alt="Foto">
-</div>
-
-<div id="customerModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
-    <div style="background:white; border-radius:30px; width:90%; max-width:500px; padding:2rem;">
-        <h3 id="customerModalTitle">👤 Nuevo Cliente</h3>
-        <form id="customerForm">
-            <input type="hidden" id="customerId">
-            <div class="form-group">
-                <label>Nombre *</label>
-                <input type="text" id="customerName" required>
-            </div>
-            <div class="form-group">
-                <label>Teléfono</label>
-                <input type="text" id="customerPhone">
-            </div>
-            <div class="form-group">
-                <label>Dirección</label>
-                <input type="text" id="customerAddress">
-            </div>
-            <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="customerEmail">
-            </div>
-            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
-                <button type="button" id="cancelCustomerBtn" class="secondary">Cancelar</button>
-                <button type="submit" id="saveCustomerBtn">Guardar</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div id="globalLoader" class="global-loader hidden">
-    <div class="spinner" style="width:50px; height:50px;"></div>
-</div>
-
 <script>
     (function() {
         // --- Configuración de Firebase ---
@@ -409,6 +13,7 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
+        // Habilitar persistencia offline (con la nueva sintaxis para evitar warning)
         db.enablePersistence({ synchronizeTabs: true }).catch(err => console.warn('Persistencia:', err));
 
         const customersCol = db.collection('customers');
@@ -423,17 +28,18 @@
         function showLoader() { loader.classList.remove('hidden'); }
         function hideLoader() { loader.classList.add('hidden'); }
 
+        // Carga inicial con límite para mejorar velocidad
         async function loadCustomers() {
-            const snap = await customersCol.orderBy('name').get();
+            const snap = await customersCol.orderBy('name').limit(500).get();
             customers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         }
         async function loadProducts() {
-            const snap = await productsCol.orderBy('name').get();
+            const snap = await productsCol.orderBy('name').limit(1000).get();
             products = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             updateProductDatalist();
         }
         async function loadOrders() {
-            const snap = await ordersCol.orderBy('date', 'desc').get();
+            const snap = await ordersCol.orderBy('date', 'desc').limit(500).get();
             orders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         }
         async function loadAllData() {
@@ -449,14 +55,15 @@
             }
         }
 
+        // Suscripciones en tiempo real (con límites también)
         function subscribeToCustomers() {
-            customersCol.orderBy('name').onSnapshot(() => loadCustomers().then(() => renderView(currentView)));
+            customersCol.orderBy('name').limit(500).onSnapshot(() => loadCustomers().then(() => renderView(currentView)));
         }
         function subscribeToProducts() {
-            productsCol.orderBy('name').onSnapshot(() => loadProducts().then(() => renderView(currentView)));
+            productsCol.orderBy('name').limit(1000).onSnapshot(() => loadProducts().then(() => renderView(currentView)));
         }
         function subscribeToOrders() {
-            ordersCol.orderBy('date', 'desc').onSnapshot(() => loadOrders().then(() => renderView(currentView)));
+            ordersCol.orderBy('date', 'desc').limit(500).onSnapshot(() => loadOrders().then(() => renderView(currentView)));
         }
         function startSubscriptions() {
             subscribeToCustomers();
@@ -517,6 +124,7 @@
                 hideLoader();
             }
         }
+        // --- FUNCIÓN SAVEORDER CORREGIDA ---
         async function saveOrder(order, file) {
             showLoader();
             try {
@@ -527,11 +135,18 @@
                 } else {
                     order.ticketPhoto = order.ticketPhoto || '';
                 }
-                if (order.id) await ordersCol.doc(order.id).set(order);
-                else await ordersCol.add(order);
+                
+                if (order.id) {
+                    // Actualizar: incluir el id en el documento (el id del documento es el mismo)
+                    await ordersCol.doc(order.id).set(order);
+                } else {
+                    // Crear nuevo: eliminar la propiedad 'id' para que no se guarde como campo undefined
+                    const { id, ...orderWithoutId } = order;
+                    await ordersCol.add(orderWithoutId);
+                }
             } catch (e) {
-                console.error(e);
-                alert('Error guardando pedido');
+                console.error('Error en saveOrder:', e);
+                alert('Error guardando pedido: ' + e.message);
             } finally {
                 hideLoader();
             }
@@ -658,7 +273,7 @@
             }
         }
 
-        // Referencias DOM
+        // Referencias DOM (igual que antes)
         const navBtns = document.querySelectorAll('.nav-btn');
         const newOrderBtn = document.getElementById('newOrderBtn');
         const searchOrders = document.getElementById('searchOrders');
@@ -730,7 +345,7 @@
             if (view === 'products') renderProductsList();
         }
 
-        // --- Renderizados con data-label para móvil ---
+        // --- Renderizados con data-label (igual) ---
         function renderOrders() {
             const filterText = searchOrders.value.toLowerCase();
             const filterStatus = statusFilter.value;
@@ -879,7 +494,6 @@
             }));
         }
 
-        // Funciones de modales (sin cambios importantes)
         function openProductModal(id) {
             alert('Edición individual no implementada. Usá Excel.');
         }
@@ -957,7 +571,8 @@
             if (!items.length) return alert('Agregá al menos un producto');
             const file = ticketPhoto.files[0];
             const order = {
-                id: orderIdHidden.value || undefined,
+                // Si hay id, lo incluimos; si no, no ponemos la propiedad
+                ...(orderIdHidden.value ? { id: orderIdHidden.value } : {}),
                 customerId,
                 date: orderDate.value,
                 status: orderStatus.value,
@@ -1182,5 +797,3 @@
         });
     })();
 </script>
-</body>
-</html>
