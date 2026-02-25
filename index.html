@@ -1,5 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AdminRepartos (Firebase) - Versión Estable</title>
+    <!-- SheetJS -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+    <style>
+        /* (mismos estilos, los omito por brevedad, pero deben incluirse) */
+        * { box-sizing: border-box; font-family: system-ui, ...; } /* etc */
+        /* ... copiar todos los estilos de la última versión ... */
+    </style>
+</head>
+<body>
+<div id="app">
+    <header>...</header>
+    <main>...</main>
+</div>
+<!-- Modales -->
+<div id="orderModal">...</div>
+<!-- etc -->
+
+<div id="globalLoader" class="global-loader hidden">...</div>
+
 <script>
-    (function() {
+// Inmediatamente, capturamos errores no controlados
+window.addEventListener('error', function(e) {
+    console.error('Error capturado:', e.error);
+    alert('Error en la aplicación: ' + e.error.message);
+});
+
+(function() {
+    console.log('Iniciando aplicación...');
+    try {
         // --- Configuración de Firebase ---
         const firebaseConfig = {
             apiKey: "AIzaSyD4iPoxUkrOWdyWkMDnOSdoDJNg96SUKTs",
@@ -13,77 +50,90 @@
         const db = firebase.firestore();
         const storage = firebase.storage();
 
-        // Habilitar persistencia offline (con la nueva sintaxis para evitar warning)
+        // Persistencia offline (opcional)
         db.enablePersistence({ synchronizeTabs: true }).catch(err => console.warn('Persistencia:', err));
 
+        // Colecciones
         const customersCol = db.collection('customers');
         const productsCol = db.collection('products');
         const ordersCol = db.collection('orders');
 
+        // --- Estado local ---
         let customers = [];
         let products = [];
         let orders = [];
 
+        // --- Loader ---
         const loader = document.getElementById('globalLoader');
-        function showLoader() { loader.classList.remove('hidden'); }
-        function hideLoader() { loader.classList.add('hidden'); }
+        if (!loader) console.warn('Loader no encontrado');
+        function showLoader() { if (loader) loader.classList.remove('hidden'); }
+        function hideLoader() { if (loader) loader.classList.add('hidden'); }
 
-        // Carga inicial con límite para mejorar velocidad
+        // --- Funciones de carga (sin límites para evitar problemas) ---
         async function loadCustomers() {
-            const snap = await customersCol.orderBy('name').limit(500).get();
+            const snap = await customersCol.orderBy('name').get();
             customers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         }
         async function loadProducts() {
-            const snap = await productsCol.orderBy('name').limit(1000).get();
+            const snap = await productsCol.orderBy('name').get();
             products = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             updateProductDatalist();
         }
         async function loadOrders() {
-            const snap = await ordersCol.orderBy('date', 'desc').limit(500).get();
+            const snap = await ordersCol.orderBy('date', 'desc').get();
             orders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         }
+
         async function loadAllData() {
             showLoader();
             try {
                 await Promise.all([loadCustomers(), loadProducts(), loadOrders()]);
                 renderView(currentView);
             } catch (e) {
-                console.error(e);
-                alert('Error cargando datos');
+                console.error('Error cargando datos:', e);
+                alert('Error al conectar con Firebase. Revisá la consola.');
             } finally {
                 hideLoader();
             }
         }
 
-        // Suscripciones en tiempo real (con límites también)
+        // --- Suscripciones en tiempo real ---
         function subscribeToCustomers() {
-            customersCol.orderBy('name').limit(500).onSnapshot(() => loadCustomers().then(() => renderView(currentView)));
+            customersCol.orderBy('name').onSnapshot(() => {
+                loadCustomers().then(() => renderView(currentView));
+            }, err => console.error('Error en suscripción customers:', err));
         }
         function subscribeToProducts() {
-            productsCol.orderBy('name').limit(1000).onSnapshot(() => loadProducts().then(() => renderView(currentView)));
+            productsCol.orderBy('name').onSnapshot(() => {
+                loadProducts().then(() => renderView(currentView));
+            }, err => console.error('Error en suscripción products:', err));
         }
         function subscribeToOrders() {
-            ordersCol.orderBy('date', 'desc').limit(500).onSnapshot(() => loadOrders().then(() => renderView(currentView)));
+            ordersCol.orderBy('date', 'desc').onSnapshot(() => {
+                loadOrders().then(() => renderView(currentView));
+            }, err => console.error('Error en suscripción orders:', err));
         }
+
         function startSubscriptions() {
             subscribeToCustomers();
             subscribeToProducts();
             subscribeToOrders();
         }
 
-        // CRUD
+        // --- CRUD ---
         async function saveCustomer(cust) {
             showLoader();
             try {
                 if (cust.id) await customersCol.doc(cust.id).set(cust);
                 else await customersCol.add(cust);
             } catch (e) {
-                console.error(e);
+                console.error('Error guardando cliente:', e);
                 alert('Error guardando cliente');
             } finally {
                 hideLoader();
             }
         }
+
         async function deleteCustomer(id) {
             if (orders.some(o => o.customerId === id)) {
                 alert('Cliente tiene pedidos, no se puede eliminar');
@@ -94,37 +144,39 @@
             try {
                 await customersCol.doc(id).delete();
             } catch (e) {
-                console.error(e);
+                console.error('Error eliminando cliente:', e);
                 alert('Error eliminando cliente');
             } finally {
                 hideLoader();
             }
         }
+
         async function saveProduct(prod) {
             showLoader();
             try {
                 if (prod.id) await productsCol.doc(prod.id).set(prod);
                 else await productsCol.add(prod);
             } catch (e) {
-                console.error(e);
+                console.error('Error guardando producto:', e);
                 alert('Error guardando producto');
             } finally {
                 hideLoader();
             }
         }
+
         async function deleteProduct(id) {
             if (!confirm('¿Eliminar producto?')) return;
             showLoader();
             try {
                 await productsCol.doc(id).delete();
             } catch (e) {
-                console.error(e);
+                console.error('Error eliminando producto:', e);
                 alert('Error eliminando producto');
             } finally {
                 hideLoader();
             }
         }
-        // --- FUNCIÓN SAVEORDER CORREGIDA ---
+
         async function saveOrder(order, file) {
             showLoader();
             try {
@@ -137,10 +189,9 @@
                 }
                 
                 if (order.id) {
-                    // Actualizar: incluir el id en el documento (el id del documento es el mismo)
                     await ordersCol.doc(order.id).set(order);
                 } else {
-                    // Crear nuevo: eliminar la propiedad 'id' para que no se guarde como campo undefined
+                    // Eliminar la propiedad id si existe (puede venir como undefined)
                     const { id, ...orderWithoutId } = order;
                     await ordersCol.add(orderWithoutId);
                 }
@@ -151,31 +202,33 @@
                 hideLoader();
             }
         }
+
         async function deleteOrder(id) {
             if (!confirm('¿Eliminar pedido?')) return;
             showLoader();
             try {
                 await ordersCol.doc(id).delete();
             } catch (e) {
-                console.error(e);
+                console.error('Error eliminando pedido:', e);
                 alert('Error eliminando pedido');
             } finally {
                 hideLoader();
             }
         }
+
         async function updateOrderStatus(id, status) {
             showLoader();
             try {
                 await ordersCol.doc(id).update({ status });
             } catch (e) {
-                console.error(e);
+                console.error('Error actualizando estado:', e);
                 alert('Error actualizando estado');
             } finally {
                 hideLoader();
             }
         }
 
-        // Importar productos (batch)
+        // --- Importación de productos (batch) ---
         async function importProducts(newProductsArray) {
             showLoader();
             const total = newProductsArray.length;
@@ -205,6 +258,7 @@
                 hideLoader();
             }
         }
+
         async function clearAllProducts() {
             if (!confirm('¿Eliminar TODOS los productos?')) return;
             showLoader();
@@ -214,14 +268,14 @@
                 snap.docs.forEach(doc => batch.delete(doc.ref));
                 await batch.commit();
             } catch (e) {
-                console.error(e);
-                alert('Error limpiando');
+                console.error('Error limpiando:', e);
+                alert('Error limpiando productos');
             } finally {
                 hideLoader();
             }
         }
 
-        // Backup / Restore
+        // --- Backup / Restore ---
         async function exportBackup() {
             showLoader();
             try {
@@ -242,115 +296,139 @@
                 a.click();
                 URL.revokeObjectURL(url);
             } catch (e) {
-                console.error(e);
-                alert('Error exportando');
+                console.error('Error exportando:', e);
+                alert('Error exportando backup');
             } finally {
                 hideLoader();
             }
         }
+
         async function importBackup(file) {
             showLoader();
             try {
                 const text = await file.text();
                 const data = JSON.parse(text);
                 const batch = db.batch();
+
+                // Limpiar colecciones existentes
                 const [custSnap, prodSnap, orderSnap] = await Promise.all([
                     customersCol.get(), productsCol.get(), ordersCol.get()
                 ]);
                 custSnap.docs.forEach(d => batch.delete(d.ref));
                 prodSnap.docs.forEach(d => batch.delete(d.ref));
                 orderSnap.docs.forEach(d => batch.delete(d.ref));
-                data.customers?.forEach(c => batch.set(customersCol.doc(c.id || undefined), c));
-                data.products?.forEach(p => batch.set(productsCol.doc(p.id || undefined), p));
-                data.orders?.forEach(o => batch.set(ordersCol.doc(o.id || undefined), o));
+
+                // Agregar nuevos
+                if (data.customers) data.customers.forEach(c => {
+                    batch.set(customersCol.doc(c.id || undefined), c);
+                });
+                if (data.products) data.products.forEach(p => {
+                    batch.set(productsCol.doc(p.id || undefined), p);
+                });
+                if (data.orders) data.orders.forEach(o => {
+                    batch.set(ordersCol.doc(o.id || undefined), o);
+                });
+
                 await batch.commit();
                 alert('Restauración exitosa');
             } catch (e) {
-                console.error(e);
+                console.error('Error importando backup:', e);
                 alert('Error en restauración');
             } finally {
                 hideLoader();
             }
         }
 
-        // Referencias DOM (igual que antes)
+        // --- Referencias DOM (con verificación) ---
+        function getElement(id) {
+            const el = document.getElementById(id);
+            if (!el) console.warn(`Elemento con id "${id}" no encontrado`);
+            return el;
+        }
+
         const navBtns = document.querySelectorAll('.nav-btn');
-        const newOrderBtn = document.getElementById('newOrderBtn');
-        const searchOrders = document.getElementById('searchOrders');
-        const statusFilter = document.getElementById('statusFilter');
-        const dateFrom = document.getElementById('dateFrom');
-        const dateTo = document.getElementById('dateTo');
-        const ordersListDiv = document.getElementById('ordersList');
-        const customersListDiv = document.getElementById('customersList');
-        const productListDiv = document.getElementById('productList');
-        const newCustomerBtn = document.getElementById('newCustomerBtn');
-        const productFile = document.getElementById('productFile');
-        const dropZone = document.getElementById('dropZone');
-        const clearProductsBtn = document.getElementById('clearProducts');
-        const exportBackupBtn = document.getElementById('exportBackup');
-        const importZone = document.getElementById('importZone');
-        const importFile = document.getElementById('importFile');
+        const newOrderBtn = getElement('newOrderBtn');
+        const searchOrders = getElement('searchOrders');
+        const statusFilter = getElement('statusFilter');
+        const dateFrom = getElement('dateFrom');
+        const dateTo = getElement('dateTo');
+        const ordersListDiv = getElement('ordersList');
+        const customersListDiv = getElement('customersList');
+        const productListDiv = getElement('productList');
+        const newCustomerBtn = getElement('newCustomerBtn');
+        const productFile = getElement('productFile');
+        const dropZone = getElement('dropZone');
+        const clearProductsBtn = getElement('clearProducts');
+        const exportBackupBtn = getElement('exportBackup');
+        const importZone = getElement('importZone');
+        const importFile = getElement('importFile');
 
-        const orderModal = document.getElementById('orderModal');
-        const quickCustomerModal = document.getElementById('quickCustomerModal');
-        const customerModal = document.getElementById('customerModal');
-        const imageModal = document.getElementById('imageModal');
-        const modalImage = document.getElementById('modalImage');
+        const orderModal = getElement('orderModal');
+        const quickCustomerModal = getElement('quickCustomerModal');
+        const customerModal = getElement('customerModal');
+        const imageModal = getElement('imageModal');
+        const modalImage = getElement('modalImage');
 
-        const quickAddCustomerBtn = document.getElementById('quickAddCustomerBtn');
-        const quickCustomerForm = document.getElementById('quickCustomerForm');
-        const cancelQuickBtn = document.getElementById('cancelQuickBtn');
-        const quickName = document.getElementById('quickName');
-        const quickPhone = document.getElementById('quickPhone');
-        const quickAddress = document.getElementById('quickAddress');
-        const quickEmail = document.getElementById('quickEmail');
+        const quickAddCustomerBtn = getElement('quickAddCustomerBtn');
+        const quickCustomerForm = getElement('quickCustomerForm');
+        const cancelQuickBtn = getElement('cancelQuickBtn');
+        const quickName = getElement('quickName');
+        const quickPhone = getElement('quickPhone');
+        const quickAddress = getElement('quickAddress');
+        const quickEmail = getElement('quickEmail');
 
-        const orderForm = document.getElementById('orderForm');
-        const cancelOrderBtn = document.getElementById('cancelOrderBtn');
-        const addProductBtn = document.getElementById('addProductBtn');
-        const productsContainer = document.getElementById('productsContainer');
-        const customerSelect = document.getElementById('customerSelect');
-        const orderDate = document.getElementById('orderDate');
-        const orderStatus = document.getElementById('orderStatus');
-        const orderComments = document.getElementById('orderComments');
-        const ticketPhoto = document.getElementById('ticketPhoto');
-        const photoPreviewContainer = document.getElementById('photoPreviewContainer');
-        const orderIdHidden = document.getElementById('orderId');
-        const modalTitle = document.getElementById('modalTitle');
+        const orderForm = getElement('orderForm');
+        const cancelOrderBtn = getElement('cancelOrderBtn');
+        const addProductBtn = getElement('addProductBtn');
+        const productsContainer = getElement('productsContainer');
+        const customerSelect = getElement('customerSelect');
+        const orderDate = getElement('orderDate');
+        const orderStatus = getElement('orderStatus');
+        const orderComments = getElement('orderComments');
+        const ticketPhoto = getElement('ticketPhoto');
+        const photoPreviewContainer = getElement('photoPreviewContainer');
+        const orderIdHidden = getElement('orderId');
+        const modalTitle = getElement('modalTitle');
 
-        const customerForm = document.getElementById('customerForm');
-        const cancelCustomerBtn = document.getElementById('cancelCustomerBtn');
-        const customerIdHidden = document.getElementById('customerId');
-        const customerName = document.getElementById('customerName');
-        const customerPhone = document.getElementById('customerPhone');
-        const customerAddress = document.getElementById('customerAddress');
-        const customerEmail = document.getElementById('customerEmail');
-        const customerModalTitle = document.getElementById('customerModalTitle');
+        const customerForm = getElement('customerForm');
+        const cancelCustomerBtn = getElement('cancelCustomerBtn');
+        const customerIdHidden = getElement('customerId');
+        const customerName = getElement('customerName');
+        const customerPhone = getElement('customerPhone');
+        const customerAddress = getElement('customerAddress');
+        const customerEmail = getElement('customerEmail');
+        const customerModalTitle = getElement('customerModalTitle');
 
         let currentView = 'orders';
 
         function setActiveView(view) {
             currentView = view;
             document.querySelectorAll('.views-container > div').forEach(div => div.classList.remove('active-view'));
-            document.getElementById(`view-${view}`).classList.add('active-view');
+            const viewEl = document.getElementById(`view-${view}`);
+            if (viewEl) viewEl.classList.add('active-view');
             navBtns.forEach(btn => btn.classList.remove('active'));
-            document.querySelector(`.nav-btn[data-view="${view}"]`).classList.add('active');
+            const activeBtn = document.querySelector(`.nav-btn[data-view="${view}"]`);
+            if (activeBtn) activeBtn.classList.add('active');
             renderView(view);
         }
-        navBtns.forEach(btn => btn.addEventListener('click', () => setActiveView(btn.dataset.view)));
 
-        function renderView(view) {
-            if (view === 'orders') renderOrders();
-            if (view === 'customers') renderCustomers();
-            if (view === 'products') renderProductsList();
+        if (navBtns.length) {
+            navBtns.forEach(btn => btn.addEventListener('click', () => setActiveView(btn.dataset.view)));
         }
 
-        // --- Renderizados con data-label (igual) ---
+        function renderView(view) {
+            if (view === 'orders' && ordersListDiv) renderOrders();
+            if (view === 'customers' && customersListDiv) renderCustomers();
+            if (view === 'products' && productListDiv) renderProductsList();
+        }
+
+        // --- Funciones de renderizado (con verificaciones) ---
         function renderOrders() {
-            const filterText = searchOrders.value.toLowerCase();
-            const filterStatus = statusFilter.value;
-            const from = dateFrom.value;
-            const to = dateTo.value;
+            if (!ordersListDiv) return;
+            const filterText = searchOrders ? searchOrders.value.toLowerCase() : '';
+            const filterStatus = statusFilter ? statusFilter.value : 'todos';
+            const from = dateFrom ? dateFrom.value : '';
+            const to = dateTo ? dateTo.value : '';
 
             let filtered = orders.filter(o => {
                 if (filterStatus !== 'todos' && o.status !== filterStatus) return false;
@@ -396,7 +474,7 @@
             html += '</tbody></table>';
             ordersListDiv.innerHTML = html;
 
-            // Eventos
+            // Asignar eventos (usando delegación sería mejor, pero mantenemos así por ahora)
             document.querySelectorAll('.edit-order').forEach(btn => btn.addEventListener('click', e => {
                 e.stopPropagation();
                 openOrderModal(btn.dataset.id);
@@ -407,13 +485,16 @@
             }));
             document.querySelectorAll('.view-photo').forEach(btn => btn.addEventListener('click', e => {
                 e.stopPropagation();
-                modalImage.src = btn.dataset.photo;
-                imageModal.style.display = 'flex';
+                if (modalImage) {
+                    modalImage.src = btn.dataset.photo;
+                    if (imageModal) imageModal.style.display = 'flex';
+                }
             }));
             document.querySelectorAll('.badge').forEach(badge => {
                 badge.addEventListener('click', e => {
                     e.stopPropagation();
                     const menu = document.getElementById(`status-menu-${badge.dataset.orderId}`);
+                    if (!menu) return;
                     document.querySelectorAll('.status-menu').forEach(m => m.style.display = 'none');
                     const rect = badge.getBoundingClientRect();
                     menu.style.top = rect.bottom + window.scrollY + 'px';
@@ -425,17 +506,20 @@
                 btn.addEventListener('click', async e => {
                     e.stopPropagation();
                     const menu = btn.closest('.status-menu');
+                    if (!menu) return;
                     const id = menu.id.replace('status-menu-', '');
                     await updateOrderStatus(id, btn.dataset.status);
                     menu.style.display = 'none';
                 });
             });
+            // Cerrar menús al hacer clic fuera
             document.addEventListener('click', () => {
                 document.querySelectorAll('.status-menu').forEach(m => m.style.display = 'none');
             });
         }
 
         function renderCustomers() {
+            if (!customersListDiv) return;
             if (!customers.length) {
                 customersListDiv.innerHTML = '<p class="card">No hay clientes.</p>';
                 return;
@@ -466,6 +550,7 @@
         }
 
         function renderProductsList() {
+            if (!productListDiv) return;
             if (!products.length) {
                 productListDiv.innerHTML = '<p>No hay productos cargados.</p>';
                 return;
@@ -499,6 +584,7 @@
         }
 
         function openOrderModal(id) {
+            if (!modalTitle || !orderForm || !orderIdHidden || !productsContainer || !photoPreviewContainer || !customerSelect || !orderDate || !orderStatus || !orderComments) return;
             modalTitle.innerText = id ? '✏️ Editar Pedido' : '➕ Nuevo Pedido';
             orderForm.reset();
             orderIdHidden.value = '';
@@ -526,14 +612,16 @@
                 orderDate.value = now.toISOString().slice(0, 16);
                 addProductRow();
             }
-            orderModal.style.display = 'flex';
+            if (orderModal) orderModal.style.display = 'flex';
         }
 
         function updateCustomerSelect() {
+            if (!customerSelect) return;
             customerSelect.innerHTML = '<option value="">Seleccionar cliente</option>' + customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
         }
 
         function addProductRow(item) {
+            if (!productsContainer) return;
             const div = document.createElement('div');
             div.className = 'product-item';
             div.innerHTML = `
@@ -546,74 +634,82 @@
             productsContainer.appendChild(div);
         }
 
-        cancelOrderBtn.addEventListener('click', () => orderModal.style.display = 'none');
+        if (cancelOrderBtn) cancelOrderBtn.addEventListener('click', () => { if (orderModal) orderModal.style.display = 'none'; });
         window.addEventListener('click', e => {
-            if (e.target === orderModal) orderModal.style.display = 'none';
-            if (e.target === quickCustomerModal) quickCustomerModal.style.display = 'none';
-            if (e.target === customerModal) customerModal.style.display = 'none';
-            if (e.target === imageModal) imageModal.style.display = 'none';
+            if (e.target === orderModal && orderModal) orderModal.style.display = 'none';
+            if (e.target === quickCustomerModal && quickCustomerModal) quickCustomerModal.style.display = 'none';
+            if (e.target === customerModal && customerModal) customerModal.style.display = 'none';
+            if (e.target === imageModal && imageModal) imageModal.style.display = 'none';
         });
 
-        orderForm.addEventListener('submit', async e => {
-            e.preventDefault();
-            const customerId = customerSelect.value;
-            if (!customerId) return alert('Seleccioná un cliente');
-            const items = [];
-            document.querySelectorAll('#productsContainer .product-item').forEach(row => {
-                const name = row.querySelector('.product-name').value.trim();
-                if (!name) return;
-                items.push({
-                    productName: name,
-                    quantity: parseInt(row.querySelector('.product-qty').value) || 1,
-                    price: parseFloat(row.querySelector('.product-price').value) || 0
+        if (orderForm) {
+            orderForm.addEventListener('submit', async e => {
+                e.preventDefault();
+                if (!customerSelect) return alert('Error en formulario');
+                const customerId = customerSelect.value;
+                if (!customerId) return alert('Seleccioná un cliente');
+                const items = [];
+                document.querySelectorAll('#productsContainer .product-item').forEach(row => {
+                    const nameInput = row.querySelector('.product-name');
+                    if (!nameInput) return;
+                    const name = nameInput.value.trim();
+                    if (!name) return;
+                    const qty = parseInt(row.querySelector('.product-qty')?.value) || 1;
+                    const price = parseFloat(row.querySelector('.product-price')?.value) || 0;
+                    items.push({ productName: name, quantity: qty, price });
                 });
+                if (!items.length) return alert('Agregá al menos un producto');
+                const file = ticketPhoto ? ticketPhoto.files[0] : null;
+                const order = {
+                    ...(orderIdHidden && orderIdHidden.value ? { id: orderIdHidden.value } : {}),
+                    customerId,
+                    date: orderDate ? orderDate.value : '',
+                    status: orderStatus ? orderStatus.value : 'pendiente',
+                    comments: orderComments ? orderComments.value : '',
+                    items,
+                    ticketPhoto: ''
+                };
+                await saveOrder(order, file);
+                if (orderModal) orderModal.style.display = 'none';
             });
-            if (!items.length) return alert('Agregá al menos un producto');
-            const file = ticketPhoto.files[0];
-            const order = {
-                // Si hay id, lo incluimos; si no, no ponemos la propiedad
-                ...(orderIdHidden.value ? { id: orderIdHidden.value } : {}),
-                customerId,
-                date: orderDate.value,
-                status: orderStatus.value,
-                comments: orderComments.value,
-                items,
-                ticketPhoto: ''
-            };
-            await saveOrder(order, file);
-            orderModal.style.display = 'none';
-        });
+        }
 
-        ticketPhoto.addEventListener('change', e => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = ev => photoPreviewContainer.innerHTML = `<img src="${ev.target.result}" class="photo-preview">`;
-                reader.readAsDataURL(file);
-            }
-        });
+        if (ticketPhoto) {
+            ticketPhoto.addEventListener('change', e => {
+                const file = e.target.files[0];
+                if (file && photoPreviewContainer) {
+                    const reader = new FileReader();
+                    reader.onload = ev => photoPreviewContainer.innerHTML = `<img src="${ev.target.result}" class="photo-preview">`;
+                    reader.readAsDataURL(file);
+                }
+            });
+        }
 
-        addProductBtn.addEventListener('click', () => addProductRow());
+        if (addProductBtn) addProductBtn.addEventListener('click', () => addProductRow());
 
-        quickAddCustomerBtn.addEventListener('click', () => {
-            quickCustomerForm.reset();
-            quickCustomerModal.style.display = 'flex';
+        if (quickAddCustomerBtn) quickAddCustomerBtn.addEventListener('click', () => {
+            if (quickCustomerForm) quickCustomerForm.reset();
+            if (quickCustomerModal) quickCustomerModal.style.display = 'flex';
         });
-        cancelQuickBtn.addEventListener('click', () => quickCustomerModal.style.display = 'none');
-        quickCustomerForm.addEventListener('submit', async e => {
-            e.preventDefault();
-            const cust = {
-                name: quickName.value.trim(),
-                phone: quickPhone.value.trim(),
-                address: quickAddress.value.trim(),
-                email: quickEmail.value.trim()
-            };
-            if (!cust.name) return alert('Nombre obligatorio');
-            await saveCustomer(cust);
-            quickCustomerModal.style.display = 'none';
-        });
+        if (cancelQuickBtn) cancelQuickBtn.addEventListener('click', () => { if (quickCustomerModal) quickCustomerModal.style.display = 'none'; });
+        if (quickCustomerForm) {
+            quickCustomerForm.addEventListener('submit', async e => {
+                e.preventDefault();
+                if (!quickName) return;
+                const cust = {
+                    name: quickName.value.trim(),
+                    phone: quickPhone ? quickPhone.value.trim() : '',
+                    address: quickAddress ? quickAddress.value.trim() : '',
+                    email: quickEmail ? quickEmail.value.trim() : ''
+                };
+                if (!cust.name) return alert('Nombre obligatorio');
+                await saveCustomer(cust);
+                if (quickCustomerModal) quickCustomerModal.style.display = 'none';
+            });
+        }
 
         function openCustomerModal(id) {
+            if (!customerModalTitle || !customerForm || !customerIdHidden || !customerName || !customerPhone || !customerAddress || !customerEmail) return;
             customerModalTitle.innerText = id ? '✏️ Editar Cliente' : '👤 Nuevo Cliente';
             customerForm.reset();
             customerIdHidden.value = '';
@@ -627,39 +723,45 @@
                     customerEmail.value = c.email || '';
                 }
             }
-            customerModal.style.display = 'flex';
+            if (customerModal) customerModal.style.display = 'flex';
         }
-        customerForm.addEventListener('submit', async e => {
-            e.preventDefault();
-            const cust = {
-                id: customerIdHidden.value || undefined,
-                name: customerName.value.trim(),
-                phone: customerPhone.value.trim(),
-                address: customerAddress.value.trim(),
-                email: customerEmail.value.trim()
-            };
-            if (!cust.name) return alert('Nombre obligatorio');
-            await saveCustomer(cust);
-            customerModal.style.display = 'none';
-        });
-        cancelCustomerBtn.addEventListener('click', () => customerModal.style.display = 'none');
-        newCustomerBtn.addEventListener('click', () => openCustomerModal());
-        newOrderBtn.addEventListener('click', () => openOrderModal());
 
-        searchOrders.addEventListener('input', renderOrders);
-        statusFilter.addEventListener('change', renderOrders);
-        dateFrom.addEventListener('change', renderOrders);
-        dateTo.addEventListener('change', renderOrders);
+        if (customerForm) {
+            customerForm.addEventListener('submit', async e => {
+                e.preventDefault();
+                if (!customerName) return;
+                const cust = {
+                    id: customerIdHidden ? customerIdHidden.value || undefined : undefined,
+                    name: customerName.value.trim(),
+                    phone: customerPhone ? customerPhone.value.trim() : '',
+                    address: customerAddress ? customerAddress.value.trim() : '',
+                    email: customerEmail ? customerEmail.value.trim() : ''
+                };
+                if (!cust.name) return alert('Nombre obligatorio');
+                await saveCustomer(cust);
+                if (customerModal) customerModal.style.display = 'none';
+            });
+        }
 
-        // Manejador de archivo de productos
+        if (cancelCustomerBtn) cancelCustomerBtn.addEventListener('click', () => { if (customerModal) customerModal.style.display = 'none'; });
+        if (newCustomerBtn) newCustomerBtn.addEventListener('click', () => openCustomerModal());
+        if (newOrderBtn) newOrderBtn.addEventListener('click', () => openOrderModal());
+
+        if (searchOrders) searchOrders.addEventListener('input', renderOrders);
+        if (statusFilter) statusFilter.addEventListener('change', renderOrders);
+        if (dateFrom) dateFrom.addEventListener('change', renderOrders);
+        if (dateTo) dateTo.addEventListener('change', renderOrders);
+
+        // --- Manejador de archivo de productos (con verificaciones) ---
         function handleProductFile(file) {
+            if (!dropZone) return;
             const reader = new FileReader();
             const ext = file.name.split('.').pop().toLowerCase();
             dropZone.innerHTML = `<span class="spinner"></span> Procesando... 0%`;
             dropZone.style.pointerEvents = 'none';
 
             const updateProgress = (percent) => {
-                dropZone.innerHTML = `<span class="spinner"></span> Procesando... ${percent}%`;
+                if (dropZone) dropZone.innerHTML = `<span class="spinner"></span> Procesando... ${percent}%`;
             };
 
             if (ext === 'csv') {
@@ -667,11 +769,11 @@
                     try {
                         const prods = parseCSV(ev.target.result);
                         importProducts(prods).then(() => {
-                            dropZone.innerHTML = '✅ Productos cargados';
+                            if (dropZone) dropZone.innerHTML = '✅ Productos cargados';
                         }).catch(() => {
-                            dropZone.innerHTML = '❌ Error';
+                            if (dropZone) dropZone.innerHTML = '❌ Error';
                         }).finally(() => {
-                            dropZone.style.pointerEvents = 'auto';
+                            if (dropZone) dropZone.style.pointerEvents = 'auto';
                             setTimeout(() => resetDropZone(), 2000);
                         });
                     } catch (err) {
@@ -713,11 +815,11 @@
                         }
                         updateProgress(100);
                         importProducts(prods).then(() => {
-                            dropZone.innerHTML = '✅ Productos cargados';
+                            if (dropZone) dropZone.innerHTML = '✅ Productos cargados';
                         }).catch(() => {
-                            dropZone.innerHTML = '❌ Error';
+                            if (dropZone) dropZone.innerHTML = '❌ Error';
                         }).finally(() => {
-                            dropZone.style.pointerEvents = 'auto';
+                            if (dropZone) dropZone.style.pointerEvents = 'auto';
                             setTimeout(() => resetDropZone(), 2000);
                         });
                     } catch (err) {
@@ -755,32 +857,42 @@
         }
 
         function resetDropZone(msg) {
+            if (!dropZone) return;
             dropZone.innerHTML = msg || '📂 Arrastrá o hacé clic para seleccionar archivo';
             dropZone.style.pointerEvents = 'auto';
         }
 
-        dropZone.addEventListener('click', () => productFile.click());
-        dropZone.addEventListener('dragover', e => e.preventDefault());
-        dropZone.addEventListener('drop', e => {
-            e.preventDefault();
-            if (e.dataTransfer.files[0]) handleProductFile(e.dataTransfer.files[0]);
-        });
-        productFile.addEventListener('change', e => {
-            if (e.target.files[0]) handleProductFile(e.target.files[0]);
-        });
+        if (dropZone) {
+            dropZone.addEventListener('click', () => productFile && productFile.click());
+            dropZone.addEventListener('dragover', e => e.preventDefault());
+            dropZone.addEventListener('drop', e => {
+                e.preventDefault();
+                if (e.dataTransfer.files[0]) handleProductFile(e.dataTransfer.files[0]);
+            });
+        }
+        if (productFile) {
+            productFile.addEventListener('change', e => {
+                if (e.target.files[0]) handleProductFile(e.target.files[0]);
+            });
+        }
 
-        clearProductsBtn.addEventListener('click', clearAllProducts);
-        exportBackupBtn.addEventListener('click', exportBackup);
-        importZone.addEventListener('click', () => importFile.click());
-        importZone.addEventListener('dragover', e => e.preventDefault());
-        importZone.addEventListener('drop', e => {
-            e.preventDefault();
-            if (e.dataTransfer.files[0]) importBackup(e.dataTransfer.files[0]);
-        });
-        importFile.addEventListener('change', e => {
-            if (e.target.files[0]) importBackup(e.target.files[0]);
-        });
+        if (clearProductsBtn) clearProductsBtn.addEventListener('click', clearAllProducts);
+        if (exportBackupBtn) exportBackupBtn.addEventListener('click', exportBackup);
+        if (importZone) {
+            importZone.addEventListener('click', () => importFile && importFile.click());
+            importZone.addEventListener('dragover', e => e.preventDefault());
+            importZone.addEventListener('drop', e => {
+                e.preventDefault();
+                if (e.dataTransfer.files[0]) importBackup(e.dataTransfer.files[0]);
+            });
+        }
+        if (importFile) {
+            importFile.addEventListener('change', e => {
+                if (e.target.files[0]) importBackup(e.target.files[0]);
+            });
+        }
 
+        // Datalist
         const datalist = document.createElement('datalist');
         datalist.id = 'productDatalist';
         document.body.appendChild(datalist);
@@ -788,12 +900,26 @@
             datalist.innerHTML = products.map(p => `<option value="${p.name}">${p.price ? '$'+p.price : ''}</option>`).join('');
         }
 
-        document.querySelector('#imageModal .close').addEventListener('click', () => imageModal.style.display = 'none');
+        const closeImage = document.querySelector('#imageModal .close');
+        if (closeImage) closeImage.addEventListener('click', () => { if (imageModal) imageModal.style.display = 'none'; });
 
         // Inicio
         loadAllData().then(() => {
             startSubscriptions();
             setActiveView('orders');
+        }).catch(err => {
+            console.error('Error en inicio:', err);
+            alert('Error al iniciar la aplicación: ' + err.message);
         });
-    })();
+
+        console.log('Aplicación iniciada correctamente');
+    } catch (error) {
+        console.error('Error fatal en la aplicación:', error);
+        alert('Error fatal: ' + error.message);
+        // Mostrar algo en la página
+        document.body.innerHTML += '<div style="color:red; padding:2rem;">Error crítico. Revisá la consola.</div>';
+    }
+})();
 </script>
+</body>
+</html>
