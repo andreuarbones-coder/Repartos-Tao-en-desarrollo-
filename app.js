@@ -45,9 +45,17 @@ window.addEventListener('error', function (e) {
         }
     };
 
-    // --- Utilidades DOM ---
+    // --- Utilidades DOM & Seguridad ---
     const getEl = (id) => document.getElementById(id);
     const loader = getEl('globalLoader');
+
+    // Helper contra XSS
+    function escapeHTML(str) {
+        if (str === null || str === undefined) return '';
+        return String(str).replace(/[&<>'"]/g, match => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+        }[match]));
+    }
 
     // Wrapper para operaciones asíncronas
     async function withLoader(actionMsg, asyncFunc) {
@@ -62,7 +70,7 @@ window.addEventListener('error', function (e) {
         }
     }
 
-    // --- Inicialización y Suscripciones (carga inicial con límite) ---
+    // --- Inicialización y Cargas ---
     function loadInitialData() {
         return Promise.all([
             loadMoreCustomers(true),
@@ -85,7 +93,7 @@ window.addEventListener('error', function (e) {
         }
         state.pagination.orders.lastVisible = snap.docs[snap.docs.length - 1];
         state.pagination.orders.hasMore = snap.docs.length === state.pagination.orders.pageSize;
-        renderOrders();
+        if(state.currentView === 'orders') renderOrders();
     }
 
     async function loadMoreCustomers(reset = false) {
@@ -102,7 +110,7 @@ window.addEventListener('error', function (e) {
         }
         state.pagination.customers.lastVisible = snap.docs[snap.docs.length - 1];
         state.pagination.customers.hasMore = snap.docs.length === state.pagination.customers.pageSize;
-        renderCustomers();
+        if(state.currentView === 'customers') renderCustomers();
     }
 
     async function loadMoreProducts(reset = false) {
@@ -119,29 +127,70 @@ window.addEventListener('error', function (e) {
         }
         state.pagination.products.lastVisible = snap.docs[snap.docs.length - 1];
         state.pagination.products.hasMore = snap.docs.length === state.pagination.products.pageSize;
-        renderProductsList();
+        if(state.currentView === 'products') renderProductsList();
         updateProductDatalist();
     }
 
-    // Suscripciones en tiempo real (solo para escuchar cambios, pero no recargamos todo)
+    // --- Suscripciones en tiempo real usando docChanges() ---
     function subscribeToCustomers() {
-        refs.customers.orderBy('name').onSnapshot(snap => {
-            // Solo actualizamos si hay cambios en los documentos que ya tenemos o si es necesario
-            // Por simplicidad, recargamos los primeros 50
-            loadMoreCustomers(true);
-        }, err => console.error('Error en suscripción customers:', err));
+        refs.customers.orderBy('name').limit(50).onSnapshot(snap => {
+            let hasChanges = false;
+            snap.docChanges().forEach(change => {
+                const data = { id: change.doc.id, ...change.doc.data() };
+                if (change.type === 'added') {
+                    if (!state.customers.some(c => c.id === data.id)) state.customers.unshift(data);
+                } else if (change.type === 'modified') {
+                    const idx = state.customers.findIndex(c => c.id === data.id);
+                    if (idx !== -1) state.customers[idx] = data;
+                } else if (change.type === 'removed') {
+                    state.customers = state.customers.filter(c => c.id !== data.id);
+                }
+                hasChanges = true;
+            });
+            if (hasChanges && state.currentView === 'customers') renderCustomers();
+        }, err => console.error('Error suscripción customers:', err));
     }
 
     function subscribeToProducts() {
-        refs.products.orderBy('name').onSnapshot(snap => {
-            loadMoreProducts(true);
-        }, err => console.error('Error en suscripción products:', err));
+        refs.products.orderBy('name').limit(50).onSnapshot(snap => {
+            let hasChanges = false;
+            snap.docChanges().forEach(change => {
+                const data = { id: change.doc.id, ...change.doc.data() };
+                if (change.type === 'added') {
+                    if (!state.products.some(p => p.id === data.id)) state.products.unshift(data);
+                } else if (change.type === 'modified') {
+                    const idx = state.products.findIndex(p => p.id === data.id);
+                    if (idx !== -1) state.products[idx] = data;
+                } else if (change.type === 'removed') {
+                    state.products = state.products.filter(p => p.id !== data.id);
+                }
+                hasChanges = true;
+            });
+            if (hasChanges) {
+                if (state.currentView === 'products') renderProductsList();
+                updateProductDatalist();
+            }
+        }, err => console.error('Error suscripción products:', err));
     }
 
     function subscribeToOrders() {
-        refs.orders.orderBy('date', 'desc').onSnapshot(snap => {
-            loadMoreOrders(true);
-        }, err => console.error('Error en suscripción orders:', err));
+        refs.orders.orderBy('date', 'desc').limit(50).onSnapshot(snap => {
+            let hasChanges = false;
+            snap.docChanges().forEach(change => {
+                const data = { id: change.doc.id, ...change.doc.data() };
+                if (change.type === 'added') {
+                    // Evitar duplicar los que ya cargó la consulta manual initialData
+                    if (!state.orders.some(o => o.id === data.id)) state.orders.unshift(data);
+                } else if (change.type === 'modified') {
+                    const idx = state.orders.findIndex(o => o.id === data.id);
+                    if (idx !== -1) state.orders[idx] = data;
+                } else if (change.type === 'removed') {
+                    state.orders = state.orders.filter(o => o.id !== data.id);
+                }
+                hasChanges = true;
+            });
+            if (hasChanges && state.currentView === 'orders') renderOrders();
+        }, err => console.error('Error suscripción orders:', err));
     }
 
     function startSubscriptions() {
@@ -179,7 +228,7 @@ window.addEventListener('error', function (e) {
         else if (view === 'products') renderProductsList();
     }
 
-    // --- Render Orders con botón "Cargar más" ---
+    // --- Render Orders ---
     function renderOrders() {
         const ordersListDiv = getEl('ordersList');
         if (!ordersListDiv) return;
@@ -189,16 +238,21 @@ window.addEventListener('error', function (e) {
         const from = getEl('dateFrom')?.value || '';
         const to = getEl('dateTo')?.value || '';
 
-        // Aplicar filtros sobre los pedidos cargados
         let filtered = state.orders.filter(o => {
             if (filterStatus !== 'todos' && o.status !== filterStatus) return false;
             const d = o.date ? o.date.split('T')[0] : '';
             if (from && d < from) return false;
             if (to && d > to) return false;
             if (filterText) {
-                const c = state.customers.find(c => c.id === o.customerId) || {};
-                const txt = `${c.name} ${c.phone || ''} ${c.address || ''} ${c.email || ''} ${o.comments || ''} ${o.items.map(i => i.productName).join(' ')}`.toLowerCase();
-                return txt.includes(filterText);
+                // Búsqueda optimizada por index
+                if (o.searchIndex) {
+                    return o.searchIndex.includes(filterText);
+                } else {
+                    // Fallback a mapeo en vivo para pedidos antiguos
+                    const c = state.customers.find(c => c.id === o.customerId) || {};
+                    const txt = `${c.name} ${c.phone || ''} ${c.address || ''} ${c.email || ''} ${o.comments || ''} ${o.items.map(i => i.productName).join(' ')}`.toLowerCase();
+                    return txt.includes(filterText);
+                }
             }
             return true;
         });
@@ -211,10 +265,10 @@ window.addEventListener('error', function (e) {
         let html = '<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Estado</th><th>Productos</th><th>Comentarios</th><th>Acciones</th></tr></thead><tbody>';
         filtered.forEach(o => {
             const c = state.customers.find(c => c.id === o.customerId) || { name: '?' };
-            const itemsHtml = o.items.map(i => `<li>${i.productName} x${i.quantity} ($${i.price})</li>`).join('');
+            const itemsHtml = o.items.map(i => `<li>${escapeHTML(i.productName)} x${i.quantity} ($${i.price})</li>`).join('');
             html += `<tr>
-                <td data-label="Fecha">${o.date ? new Date(o.date).toLocaleString() : ''}</td>
-                <td data-label="Cliente">${c.name}</td>
+                <td data-label="Fecha">${escapeHTML(o.date ? new Date(o.date).toLocaleString() : '')}</td>
+                <td data-label="Cliente">${escapeHTML(c.name)}</td>
                 <td data-label="Estado">
                     <span class="badge ${o.status}" data-action="toggle-status" data-id="${o.id}">${o.status}</span>
                     <div class="status-menu hidden" id="status-menu-${o.id}">
@@ -224,7 +278,7 @@ window.addEventListener('error', function (e) {
                     </div>
                 </td>
                 <td data-label="Productos"><ul class="product-list">${itemsHtml}</ul></td>
-                <td data-label="Comentarios">${o.comments || ''}</td>
+                <td data-label="Comentarios">${escapeHTML(o.comments)}</td>
                 <td class="actions-cell" data-label="Acciones">
                     <button class="icon-btn" data-action="edit-order" data-id="${o.id}">✏️</button>
                     <button class="icon-btn" data-action="delete-order" data-id="${o.id}">🗑️</button>
@@ -234,21 +288,15 @@ window.addEventListener('error', function (e) {
         });
         html += '</tbody></table>';
 
-        // Botón "Cargar más" si hay más
         if (state.pagination.orders.hasMore) {
-            html += '<div style="text-align: center; margin: 1rem 0;"><button id="loadMoreOrdersBtn" class="secondary">Cargar más pedidos</button></div>';
+            // Se usa el delegado de datos data-action en vez del id suelto
+            html += '<div style="text-align: center; margin: 1rem 0;"><button data-action="load-more-orders" class="secondary">Cargar más pedidos</button></div>';
         }
 
         ordersListDiv.innerHTML = html;
-
-        // Evento para cargar más
-        const loadMoreBtn = getEl('loadMoreOrdersBtn');
-        if (loadMoreBtn) {
-            loadMoreBtn.addEventListener('click', () => loadMoreOrders(false));
-        }
     }
 
-    // --- Render Customers con botón "Cargar más" ---
+    // --- Render Customers ---
     function renderCustomers() {
         const customersListDiv = getEl('customersList');
         if (!customersListDiv) return;
@@ -261,10 +309,10 @@ window.addEventListener('error', function (e) {
         let html = '<table><thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Email</th><th>Acciones</th></tr></thead><tbody>';
         state.customers.forEach(c => {
             html += `<tr>
-                <td data-label="Nombre">${c.name}</td>
-                <td data-label="Teléfono">${c.phone || ''}</td>
-                <td data-label="Dirección">${c.address || ''}</td>
-                <td data-label="Email">${c.email || ''}</td>
+                <td data-label="Nombre">${escapeHTML(c.name)}</td>
+                <td data-label="Teléfono">${escapeHTML(c.phone)}</td>
+                <td data-label="Dirección">${escapeHTML(c.address)}</td>
+                <td data-label="Email">${escapeHTML(c.email)}</td>
                 <td class="actions-cell" data-label="Acciones">
                     <button class="icon-btn" data-action="edit-customer" data-id="${c.id}">✏️</button>
                     <button class="icon-btn" data-action="delete-customer" data-id="${c.id}">🗑️</button>
@@ -274,18 +322,13 @@ window.addEventListener('error', function (e) {
         html += '</tbody></table>';
 
         if (state.pagination.customers.hasMore) {
-            html += '<div style="text-align: center; margin: 1rem 0;"><button id="loadMoreCustomersBtn" class="secondary">Cargar más clientes</button></div>';
+            html += '<div style="text-align: center; margin: 1rem 0;"><button data-action="load-more-customers" class="secondary">Cargar más clientes</button></div>';
         }
 
         customersListDiv.innerHTML = html;
-
-        const loadMoreBtn = getEl('loadMoreCustomersBtn');
-        if (loadMoreBtn) {
-            loadMoreBtn.addEventListener('click', () => loadMoreCustomers(false));
-        }
     }
 
-    // --- Render Products con botón "Cargar más" ---
+    // --- Render Products ---
     function renderProductsList() {
         const productListDiv = getEl('productList');
         if (!productListDiv) return;
@@ -298,7 +341,7 @@ window.addEventListener('error', function (e) {
         let html = '<table><thead><tr><th>Nombre</th><th>Precio</th><th>Acciones</th></tr></thead><tbody>';
         state.products.forEach(p => {
             html += `<tr>
-                <td data-label="Nombre">${p.name}</td>
+                <td data-label="Nombre">${escapeHTML(p.name)}</td>
                 <td data-label="Precio">${p.price ? '$' + p.price : '-'}</td>
                 <td class="actions-cell" data-label="Acciones">
                     <button class="icon-btn" data-action="delete-product" data-id="${p.id}">🗑️</button>
@@ -308,15 +351,10 @@ window.addEventListener('error', function (e) {
         html += '</tbody></table>';
 
         if (state.pagination.products.hasMore) {
-            html += '<div style="text-align: center; margin: 1rem 0;"><button id="loadMoreProductsBtn" class="secondary">Cargar más productos</button></div>';
+            html += '<div style="text-align: center; margin: 1rem 0;"><button data-action="load-more-products" class="secondary">Cargar más productos</button></div>';
         }
 
         productListDiv.innerHTML = html;
-
-        const loadMoreBtn = getEl('loadMoreProductsBtn');
-        if (loadMoreBtn) {
-            loadMoreBtn.addEventListener('click', () => loadMoreProducts(false));
-        }
     }
 
     function updateProductDatalist() {
@@ -326,19 +364,24 @@ window.addEventListener('error', function (e) {
             datalist.id = 'productDatalist';
             document.body.appendChild(datalist);
         }
-        datalist.innerHTML = state.products.map(p => `<option value="${p.name}">${p.price ? '$' + p.price : ''}</option>`).join('');
+        datalist.innerHTML = state.products.map(p => `<option value="${escapeHTML(p.name)}">${p.price ? '$' + p.price : ''}</option>`).join('');
     }
 
-    // --- Delegación de Eventos Global (incluye view-file) ---
+    // --- Delegación de Eventos Global ---
     document.addEventListener('click', async e => {
         const target = e.target;
 
-        // Cerrar menús de estado si clickea afuera
+        // Cierra modales si clickea afuera de la caja o en la equis
+        if (target.matches('.modal')) target.style.display = 'none';
+        if (target.closest('.close') || target.closest('.cancel-btn')) {
+            const modal = target.closest('.modal') || target.closest('.image-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
         if (!target.closest('.status-menu') && !target.closest('[data-action="toggle-status"]')) {
             document.querySelectorAll('.status-menu').forEach(m => m.classList.add('hidden'));
         }
 
-        // Acciones de UI basadas en atributos data-action
         const actionBtn = target.closest('[data-action]');
         if (!actionBtn) return;
 
@@ -353,9 +396,7 @@ window.addEventListener('error', function (e) {
                 if (confirm('¿Eliminar pedido?')) await withLoader('Eliminando pedido', () => refs.orders.doc(id).delete());
                 break;
             case 'view-file':
-                // Abrir modal con visor de archivo (imagen o PDF)
-                openFileModal(fileUrl);
-                break;
+                openFileModal(fileUrl); break;
             case 'toggle-status':
                 const menu = getEl(`status-menu-${id}`);
                 if (menu) {
@@ -378,9 +419,15 @@ window.addEventListener('error', function (e) {
             case 'delete-product':
                 if (confirm('¿Eliminar producto?')) await withLoader('Eliminando producto', () => refs.products.doc(id).delete());
                 break;
+            // Paginación migrada a delegación global
+            case 'load-more-orders':
+                loadMoreOrders(false); break;
+            case 'load-more-customers':
+                loadMoreCustomers(false); break;
+            case 'load-more-products':
+                loadMoreProducts(false); break;
         }
 
-        // Cambiar estado desde el menú flotante
         if (target.matches('.status-menu button')) {
             const status = target.dataset.status;
             const orderId = target.dataset.id;
@@ -389,25 +436,19 @@ window.addEventListener('error', function (e) {
         }
     });
 
-    // --- Función para abrir modal de archivo (imagen o PDF) ---
+    // --- Modal de archivo ---
     function openFileModal(fileUrl) {
-        const modal = getEl('fileModal');
-        if (!modal) {
-            // Crear modal si no existe
-            const modalDiv = document.createElement('div');
+        let modalDiv = getEl('fileModal');
+        if (!modalDiv) {
+            modalDiv = document.createElement('div');
             modalDiv.id = 'fileModal';
-            modalDiv.className = 'image-modal'; // reusamos la clase image-modal
+            modalDiv.className = 'image-modal';
             modalDiv.innerHTML = `
                 <span class="close">&times;</span>
                 <div id="fileModalContent" style="width:90%; height:90%; display:flex; justify-content:center; align-items:center;"></div>
             `;
             document.body.appendChild(modalDiv);
-            modalDiv.querySelector('.close').addEventListener('click', () => modalDiv.style.display = 'none');
-            modalDiv.addEventListener('click', (e) => {
-                if (e.target === modalDiv) modalDiv.style.display = 'none';
-            });
         }
-        const modalDiv = getEl('fileModal');
         const contentDiv = getEl('fileModalContent');
         const isPdf = fileUrl.toLowerCase().endsWith('.pdf');
 
@@ -419,17 +460,17 @@ window.addEventListener('error', function (e) {
         modalDiv.style.display = 'flex';
     }
 
-    // --- Funciones de Formulario (Modales) (sin cambios) ---
+    // --- Funciones de Modales Formulario ---
     function openOrderModal(id) {
         const orderForm = getEl('orderForm');
         orderForm.reset();
         getEl('orderId').value = '';
         getEl('productsContainer').innerHTML = '';
         const previewContainer = getEl('photoPreviewContainer');
-        previewContainer.innerHTML = ''; // Limpiar previsualización
+        previewContainer.innerHTML = '';
 
         const select = getEl('customerSelect');
-        select.innerHTML = '<option value="">Seleccionar cliente</option>' + state.customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        select.innerHTML = '<option value="">Seleccionar cliente</option>' + state.customers.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
 
         if (id) {
             const o = state.orders.find(order => order.id === id);
@@ -441,13 +482,11 @@ window.addEventListener('error', function (e) {
                 getEl('orderComments').value = o.comments || '';
                 o.items.forEach(item => addProductRow(item));
 
-                // Mostrar previsualización del archivo existente
                 if (o.ticketPhoto) {
                     showFilePreview(o.ticketPhoto, previewContainer, true);
                 }
             }
         } else {
-            // Setup default date
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
             getEl('orderDate').value = now.toISOString().slice(0, 16);
@@ -457,14 +496,14 @@ window.addEventListener('error', function (e) {
     }
 
     function showFilePreview(fileUrl, container, isExisting = false) {
-        container.innerHTML = ''; // Limpiar previo
+        container.innerHTML = '';
         const isPdf = fileUrl.toLowerCase().endsWith('.pdf');
 
         if (isPdf) {
             const pdfDiv = document.createElement('div');
             pdfDiv.className = 'pdf-preview';
             pdfDiv.innerHTML = `
-                <span>📄 PDF - ${fileUrl.split('/').pop()}</span>
+                <span>📄 PDF - ${escapeHTML(fileUrl.split('/').pop())}</span>
                 <button type="button" class="remove-file-btn" data-remove-file>Eliminar</button>
             `;
             container.appendChild(pdfDiv);
@@ -482,34 +521,31 @@ window.addEventListener('error', function (e) {
             container.appendChild(removeBtn);
         }
 
-        // Botón de eliminar (funciona igual para ambos casos)
         container.querySelector('[data-remove-file], .remove-file-btn')?.addEventListener('click', () => {
-            container.innerHTML = ''; // Eliminar previsualización
-            getEl('ticketPhoto').value = ''; // Limpiar input file
+            container.innerHTML = '';
+            getEl('ticketPhoto').value = '';
         });
     }
 
-    // Evento change del input file para previsualizar antes de guardar
     getEl('ticketPhoto')?.addEventListener('change', function (e) {
         const file = e.target.files[0];
         if (!file) return;
 
         const container = getEl('photoPreviewContainer');
-        container.innerHTML = ''; // Limpiar previsualización anterior
+        container.innerHTML = '';
 
         if (file.type === 'application/pdf') {
-            // Crear URL de objeto para el PDF
             const url = URL.createObjectURL(file);
-            // Mostrar nombre y botón eliminar
             const pdfDiv = document.createElement('div');
             pdfDiv.className = 'pdf-preview';
             pdfDiv.innerHTML = `
-                <span>📄 ${file.name}</span>
+                <span>📄 ${escapeHTML(file.name)}</span>
                 <button type="button" class="remove-file-btn" data-remove-file>Eliminar</button>
             `;
             container.appendChild(pdfDiv);
-            // Para poder ver el PDF, agregamos un enlace que abra el modal
+            
             const viewLink = document.createElement('button');
+            viewLink.type = 'button';
             viewLink.textContent = 'Ver PDF';
             viewLink.className = 'secondary';
             viewLink.style.marginLeft = '1rem';
@@ -533,15 +569,16 @@ window.addEventListener('error', function (e) {
             reader.readAsDataURL(file);
         } else {
             alert('Tipo de archivo no soportado. Seleccioná una imagen o PDF.');
-            e.target.value = ''; // Limpiar input
+            e.target.value = '';
             return;
         }
 
-        // Evento para el botón eliminar dentro de la previsualización recién creada
-        container.querySelector('[data-remove-file], .remove-file-btn')?.addEventListener('click', () => {
-            container.innerHTML = '';
-            getEl('ticketPhoto').value = '';
-        });
+        setTimeout(() => {
+            container.querySelector('[data-remove-file], .remove-file-btn')?.addEventListener('click', () => {
+                container.innerHTML = '';
+                getEl('ticketPhoto').value = '';
+            });
+        }, 100);
     });
 
     function addProductRow(item) {
@@ -549,7 +586,7 @@ window.addEventListener('error', function (e) {
         const div = document.createElement('div');
         div.className = 'product-item';
         div.innerHTML = `
-            <input type="text" placeholder="Producto" list="productDatalist" value="${item ? item.productName : ''}" class="product-name">
+            <input type="text" placeholder="Producto" list="productDatalist" value="${item ? escapeHTML(item.productName) : ''}" class="product-name">
             <input type="number" placeholder="Cant" value="${item ? item.quantity : 1}" min="1" style="width:80px;" class="product-qty">
             <input type="number" placeholder="Precio" value="${item ? item.price : ''}" min="0" step="0.01" style="width:100px;" class="product-price">
             <button type="button" class="remove-product">✕</button>
@@ -558,7 +595,7 @@ window.addEventListener('error', function (e) {
         container.appendChild(div);
     }
 
-    // --- CRUD con Wrapper Async ---
+    // --- CRUD ---
     async function saveCustomer(cust) {
         await withLoader('Guardando cliente', async () => {
             if (cust.id) await refs.customers.doc(cust.id).set(cust);
@@ -573,15 +610,15 @@ window.addEventListener('error', function (e) {
                 await ref.put(file);
                 order.ticketPhoto = await ref.getDownloadURL();
             } else {
-                // Si no hay archivo, pero existe previsualización (porque no se tocó), mantener el existente.
                 const previewContainer = getEl('photoPreviewContainer');
                 if (previewContainer && previewContainer.children.length === 0) {
                     order.ticketPhoto = '';
-                } else {
-                    // Si hay previsualización pero no es de un archivo nuevo, significa que es la existente.
-                    // Ya la tenemos en order.ticketPhoto (del objeto order actual).
                 }
             }
+
+            // Indexar info para búsquedas más rápidas y económicas
+            const cust = state.customers.find(c => c.id === order.customerId) || { name:'', phone:'', address:'', email:'' };
+            order.searchIndex = `${cust.name} ${cust.phone || ''} ${cust.address || ''} ${cust.email || ''} ${order.comments || ''} ${order.items.map(i => i.productName).join(' ')}`.toLowerCase();
 
             const { id, ...orderData } = order;
             if (id) await refs.orders.doc(id).set(orderData);
@@ -589,10 +626,9 @@ window.addEventListener('error', function (e) {
         });
     }
 
-    // Bindings estáticos
+    // Bindings de UI
     getEl('addProductBtn')?.addEventListener('click', () => addProductRow());
 
-    // Bindear filtros con debounce para no recargar demasiado
     const debouncedRenderOrders = debounce(renderOrders, 300);
     ['searchOrders', 'statusFilter', 'dateFrom', 'dateTo'].forEach(id => {
         getEl(id)?.addEventListener('input', debouncedRenderOrders);
@@ -606,21 +642,16 @@ window.addEventListener('error', function (e) {
         };
     }
 
-    // Cerrar modales (clic afuera)
-    window.addEventListener('click', e => {
-        if (e.target.matches('.modal')) e.target.style.display = 'none';
-    });
-    document.querySelectorAll('.close, .cancel-btn, #cancelOrderBtn, #cancelQuickBtn, #cancelCustomerBtn').forEach(btn => {
+    // Botones para modales y cancelaciones específicas (la de cruz/fuera de modal está en la delgación global)
+    document.querySelectorAll('#cancelOrderBtn, #cancelQuickBtn, #cancelCustomerBtn').forEach(btn => {
         btn.addEventListener('click', e => {
             const modal = e.target.closest('.modal');
             if (modal) modal.style.display = 'none';
         });
     });
 
-    // Botón nuevo pedido
     getEl('newOrderBtn')?.addEventListener('click', () => openOrderModal());
 
-    // Botón cliente rápido
     getEl('quickAddCustomerBtn')?.addEventListener('click', () => {
         getEl('quickCustomerModal').style.display = 'flex';
     });
@@ -637,7 +668,6 @@ window.addEventListener('error', function (e) {
         getEl('quickCustomerModal').style.display = 'none';
     });
 
-    // Botón nuevo cliente normal
     getEl('newCustomerBtn')?.addEventListener('click', () => {
         getEl('customerModalTitle').textContent = '👤 Nuevo Cliente';
         getEl('customerForm').reset();
@@ -659,7 +689,6 @@ window.addEventListener('error', function (e) {
         getEl('customerModal').style.display = 'none';
     });
 
-    // Envío de formulario de pedido
     getEl('orderForm')?.addEventListener('submit', async e => {
         e.preventDefault();
         const customerId = getEl('customerSelect').value;
@@ -693,6 +722,6 @@ window.addEventListener('error', function (e) {
         getEl('orderModal').style.display = 'none';
     });
 
-    // --- Inicialización de la app ---
+    // --- Arranque ---
     initApp();
 })();
