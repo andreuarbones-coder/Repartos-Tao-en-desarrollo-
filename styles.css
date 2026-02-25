@@ -1,0 +1,614 @@
+/* === Estilos base === */
+* {
+    box-sizing: border-box;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background: #f4f6f9;
+    padding: 1rem;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+}
+
+#app {
+    max-width: 1400px;
+    width: 100%;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+header {
+    background: #1e2b3a;
+    color: white;
+    padding: 1rem 2rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+header h1 {
+    font-size: 1.8rem;
+    font-weight: 400;
+    margin-right: auto;
+}
+
+.nav-btn {
+    background: transparent;
+    border: none;
+    color: #ccc;
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    border-radius: 30px;
+    transition: 0.2s;
+}
+
+.nav-btn:hover {
+    background: #2c3e50;
+    color: white;
+}
+
+.nav-btn.active {
+    background: #3b4e62;
+    color: white;
+    font-weight: 500;
+}
+
+main {
+    padding: 2rem;
+}
+
+.views-container > div {
+    display: none;
+}
+
+.views-container > div.active-view {
+    display: block;
+}
+
+h2 {
+    margin-bottom: 1.5rem;
+    color: #1e2b3a;
+    font-weight: 400;
+    border-bottom: 2px solid #eaeef2;
+    padding-bottom: 0.5rem;
+}
+
+button, .btn {
+    background: #1e2b3a;
+    color: white;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 30px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: 0.2s;
+    border: 1px solid transparent;
+}
+
+button:hover {
+    background: #2c3e50;
+}
+
+button.secondary {
+    background: white;
+    color: #1e2b3a;
+    border: 1px solid #1e2b3a;
+}
+
+button.secondary:hover {
+    background: #f0f3f7;
+}
+
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    border: 1px solid #eaeef2;
+    margin-bottom: 2rem;
+}
+
+.flex-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.search-box {
+    flex: 1;
+    min-width: 250px;
+    padding: 0.7rem 1rem;
+    border-radius: 30px;
+    border: 1px solid #d0d9e2;
+    font-size: 1rem;
+}
+
+.filter-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+}
+
+.filter-group input,
+.filter-group select {
+    padding: 0.5rem 1rem;
+    border-radius: 30px;
+    border: 1px solid #d0d9e2;
+    font-size: 0.95rem;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+
+th, td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid #eaeef2;
+    vertical-align: top;
+}
+
+th {
+    background: #f8fafc;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+tr:hover {
+    background: #f9fcff;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.8rem;
+    border-radius: 30px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.badge.pendiente {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.badge.entregado {
+    background: #d4edda;
+    color: #155724;
+}
+
+.badge.incompleto {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.badge:hover {
+    filter: brightness(0.95);
+}
+
+.actions-cell {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.icon-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    border-radius: 8px;
+    line-height: 1;
+}
+
+.icon-btn:hover {
+    background: #e9ecef;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+    position: relative;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 0.7rem 1rem;
+    border-radius: 30px;
+    border: 1px solid #d0d9e2;
+    font-size: 1rem;
+}
+
+.form-group textarea {
+    border-radius: 16px;
+    resize: vertical;
+    min-height: 80px;
+}
+
+.photo-preview {
+    max-width: 150px;
+    max-height: 150px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    margin-top: 0.5rem;
+}
+
+.pdf-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #f0f0f0;
+    padding: 0.5rem;
+    border-radius: 30px;
+    margin-top: 0.5rem;
+}
+
+.remove-file-btn {
+    background: #f8d7da;
+    color: #721c24;
+    border: none;
+    padding: 0.3rem 1rem;
+    border-radius: 30px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.product-item {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.product-item input {
+    flex: 1;
+}
+
+.remove-product {
+    background: #f8d7da;
+    color: #721c24;
+    border: none;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.file-upload {
+    border: 2px dashed #b8c5d0;
+    border-radius: 30px;
+    padding: 1.5rem;
+    text-align: center;
+    background: #fcfdff;
+    cursor: pointer;
+}
+
+.file-upload:hover {
+    background: #f2f6fa;
+}
+
+.spinner {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #1e2b3a;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.status-menu {
+    position: absolute;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    padding: 0.5rem;
+    z-index: 100;
+    display: none;
+}
+
+.status-menu button {
+    display: block;
+    width: 100%;
+    background: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    text-align: left;
+    border-radius: 30px;
+    margin: 2px 0;
+    color: #1e2b3a;
+}
+
+.status-menu button:hover {
+    background: #f0f3f7;
+}
+
+.image-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.image-modal img {
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 8px;
+}
+
+.image-modal .close {
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    font-size: 2rem;
+    color: white;
+    cursor: pointer;
+}
+
+.inline-add {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.inline-add select {
+    flex: 1;
+}
+
+.inline-add button {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 1.2rem;
+    padding: 0;
+}
+
+.product-list {
+    list-style: disc;
+    padding-left: 1.2rem;
+    margin: 0;
+}
+
+.product-list li {
+    margin-bottom: 0.2rem;
+}
+
+.date-filter {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.date-filter input {
+    padding: 0.5rem;
+    border-radius: 30px;
+    border: 1px solid #d0d9e2;
+}
+
+.global-loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255,255,255,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3000;
+}
+
+.global-loader.hidden {
+    display: none;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* === Responsive (móvil) === */
+@media (max-width: 768px) {
+    header {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 1rem;
+    }
+
+    header h1 {
+        margin-right: 0;
+        text-align: center;
+    }
+
+    .nav-btn {
+        text-align: center;
+    }
+
+    .flex-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .search-box,
+    .filter-group,
+    .date-filter {
+        width: 100%;
+    }
+
+    .filter-group select,
+    .date-filter input {
+        width: 100%;
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    table, thead, tbody, th, td, tr {
+        display: block;
+    }
+
+    thead {
+        display: none;
+    }
+
+    tr {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        margin-bottom: 1rem;
+        padding: 1rem;
+        border: 1px solid #eaeef2;
+    }
+
+    td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0;
+        border: none;
+        border-bottom: 1px dashed #eaeef2;
+    }
+
+    td:last-child {
+        border-bottom: none;
+    }
+
+    td:before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: #2c3e50;
+        width: 40%;
+        font-size: 0.9rem;
+    }
+
+    .actions-cell {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+
+    .actions-cell:before {
+        content: "Acciones";
+        font-weight: 600;
+        color: #2c3e50;
+    }
+
+    .badge {
+        display: inline-block;
+        margin-left: auto;
+    }
+
+    .product-list {
+        margin: 0;
+        padding-left: 1rem;
+    }
+
+    .modal > div {
+        width: 95% !important;
+        padding: 1.5rem !important;
+    }
+
+    button, .btn {
+        padding: 0.8rem 1.5rem;
+        font-size: 1rem;
+    }
+
+    .icon-btn {
+        padding: 0.5rem 0.8rem;
+        font-size: 1.4rem;
+    }
+
+    .inline-add {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .inline-add button {
+        width: 100% !important;
+        border-radius: 30px !important;
+        height: auto;
+        padding: 0.6rem;
+    }
+
+    .product-item {
+        flex-wrap: wrap;
+    }
+
+    .product-item input {
+        flex: 1 1 calc(50% - 0.5rem);
+    }
+
+    .product-item .remove-product {
+        width: 100%;
+        border-radius: 30px;
+        margin-top: 0.5rem;
+    }
+
+    main {
+        padding: 1rem;
+    }
+
+    .status-menu {
+        position: fixed !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%);
+        width: 90%;
+        max-width: 300px;
+        padding: 1rem;
+    }
+
+    .status-menu button {
+        padding: 1rem;
+        text-align: center;
+        font-size: 1.2rem;
+    }
+}
