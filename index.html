@@ -10,6 +10,873 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
     <style>
         /* (Mismos estilos que ya tenías) */
+        * { box-sizing: border-box; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; }
+        body { background: #f4f6f9; padding: 1rem; min-height: 100vh; display: flex; justify-content: center; }
+        #app { max-width: 1400px; width: 100%; background: white; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden; }
+        header { background: #1e2b3a; color: white; padding: 1rem 2rem; display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem; }
+        header h1 { font-size: 1.8rem; font-weight: 400; margin-right: auto; }
+        .nav-btn { background: transparent; border: none; color: #ccc; font-size: 1rem; padding: 0.5rem 1rem; cursor: pointer; border-radius: 30px; transition: 0.2s; }
+        .nav-btn:hover { background: #2c3e50; color: white; }
+        .nav-btn.active { background: #3b4e62; color: white; font-weight: 500; }
+        main { padding: 2rem; }
+        .views-container > div { display: none; }
+        .views-container > div.active-view { display: block; }
+        h2 { margin-bottom: 1.5rem; color: #1e2b3a; font-weight: 400; border-bottom: 2px solid #eaeef2; padding-bottom: 0.5rem; }
+        button, .btn { background: #1e2b3a; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 30px; font-size: 0.95rem; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
+        button:hover { background: #2c3e50; }
+        button.secondary { background: white; color: #1e2b3a; border: 1px solid #1e2b3a; }
+        button.secondary:hover { background: #f0f3f7; }
+        .card { background: white; border-radius: 16px; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #eaeef2; margin-bottom: 2rem; }
+        .flex-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1.5rem; }
+        .search-box { flex: 1; min-width: 250px; padding: 0.7rem 1rem; border-radius: 30px; border: 1px solid #d0d9e2; font-size: 1rem; }
+        .filter-group { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+        .filter-group input, .filter-group select { padding: 0.5rem 1rem; border-radius: 30px; border: 1px solid #d0d9e2; font-size: 0.95rem; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+        th, td { padding: 1rem; text-align: left; border-bottom: 1px solid #eaeef2; vertical-align: top; }
+        th { background: #f8fafc; font-weight: 500; color: #2c3e50; }
+        tr:hover { background: #f9fcff; }
+        .badge { display: inline-block; padding: 0.25rem 0.8rem; border-radius: 30px; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: 0.2s; }
+        .badge.pendiente { background: #fff3cd; color: #856404; }
+        .badge.entregado { background: #d4edda; color: #155724; }
+        .badge.incompleto { background: #f8d7da; color: #721c24; }
+        .badge:hover { filter: brightness(0.95); }
+        .actions-cell { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+        .icon-btn { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; padding: 0.2rem 0.5rem; border-radius: 8px; line-height: 1; }
+        .icon-btn:hover { background: #e9ecef; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+        .form-group { margin-bottom: 1rem; position: relative; }
+        .form-group label { display: block; margin-bottom: 0.3rem; font-weight: 500; color: #2c3e50; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.7rem 1rem; border-radius: 30px; border: 1px solid #d0d9e2; font-size: 1rem; }
+        .form-group textarea { border-radius: 16px; resize: vertical; min-height: 80px; }
+        .photo-preview { max-width: 150px; max-height: 150px; border-radius: 8px; border: 1px solid #ccc; margin-top: 0.5rem; }
+        .pdf-preview { display: flex; align-items: center; gap: 0.5rem; background: #f0f0f0; padding: 0.5rem; border-radius: 30px; margin-top: 0.5rem; }
+        .remove-file-btn { background: #f8d7da; color: #721c24; border: none; padding: 0.3rem 1rem; border-radius: 30px; cursor: pointer; font-size: 0.9rem; }
+        .product-item { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+        .product-item input { flex: 1; }
+        .remove-product { background: #f8d7da; color: #721c24; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer; }
+        .file-upload { border: 2px dashed #b8c5d0; border-radius: 30px; padding: 1.5rem; text-align: center; background: #fcfdff; cursor: pointer; }
+        .file-upload:hover { background: #f2f6fa; }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #1e2b3a; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; margin-right: 8px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .status-menu { position: absolute; background: white; border-radius: 16px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); padding: 0.5rem; z-index: 100; display: none; }
+        .status-menu button { display: block; width: 100%; background: white; border: none; padding: 0.5rem 1rem; text-align: left; border-radius: 30px; margin: 2px 0; color: #1e2b3a; }
+        .status-menu button:hover { background: #f0f3f7; }
+        .image-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+        .image-modal img { max-width: 90%; max-height: 90%; border-radius: 8px; }
+        .image-modal .close { position: absolute; top: 20px; right: 30px; font-size: 2rem; color: white; cursor: pointer; }
+        .inline-add { display: flex; gap: 0.5rem; align-items: center; }
+        .inline-add select { flex: 1; }
+        .inline-add button { width: 40px; height: 40px; border-radius: 50%; font-size: 1.2rem; padding: 0; }
+        .product-list { list-style: disc; padding-left: 1.2rem; margin: 0; }
+        .product-list li { margin-bottom: 0.2rem; }
+        .date-filter { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+        .date-filter input { padding: 0.5rem; border-radius: 30px; border: 1px solid #d0d9e2; }
+        .global-loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 3000; }
+        .global-loader.hidden { display: none; }
+        .hidden { display: none !important; }
+
+        /* Responsive (mismos que antes) */
+        @media (max-width: 768px) {
+            /* ... (mantén los mismos estilos responsive) ... */
+            header { flex-direction: column; align-items: stretch; padding: 1rem; }
+            header h1 { margin-right: 0; text-align: center; }
+            .nav-btn { text-align: center; }
+            .flex-row { flex-direction: column; align-items: stretch; }
+            .search-box, .filter-group, .date-filter { width: 100%; }
+            .filter-group select, .date-filter input { width: 100%; }
+            .form-grid { grid-template-columns: 1fr; }
+            table, thead, tbody, th, td, tr { display: block; }
+            thead { display: none; }
+            tr { background: white; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 1rem; padding: 1rem; border: 1px solid #eaeef2; }
+            td { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border: none; border-bottom: 1px dashed #eaeef2; }
+            td:last-child { border-bottom: none; }
+            td:before { content: attr(data-label); font-weight: 600; color: #2c3e50; width: 40%; font-size: 0.9rem; }
+            .actions-cell { display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap; }
+            .actions-cell:before { content: "Acciones"; font-weight: 600; color: #2c3e50; }
+            .badge { display: inline-block; margin-left: auto; }
+            .product-list { margin: 0; padding-left: 1rem; }
+            .modal > div { width: 95% !important; padding: 1.5rem !important; }
+            button, .btn { padding: 0.8rem 1.5rem; font-size: 1rem; }
+            .icon-btn { padding: 0.5rem 0.8rem; font-size: 1.4rem; }
+            .inline-add { flex-direction: column; align-items: stretch; }
+            .inline-add button { width: 100% !important; border-radius: 30px !important; height: auto; padding: 0.6rem; }
+            .product-item { flex-wrap: wrap; }
+            .product-item input { flex: 1 1 calc(50% - 0.5rem); }
+            .product-item .remove-product { width: 100%; border-radius: 30px; margin-top: 0.5rem; }
+            main { padding: 1rem; }
+            .status-menu { position: fixed !important; top: 50% !important; left: 50% !important; transform: translate(-50%, -50%); width: 90%; max-width: 300px; padding: 1rem; }
+            .status-menu button { padding: 1rem; text-align: center; font-size: 1.2rem; }
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <header>
+        <h1>📦 AdminRepartos</h1>
+        <button class="nav-btn" data-view="orders">📋 Pedidos</button>
+        <button class="nav-btn" data-view="customers">👥 Clientes</button>
+        <button class="nav-btn" data-view="products">📦 Productos</button>
+        <button class="nav-btn" data-view="backup">💾 Backup</button>
+    </header>
+    <main>
+        <div class="views-container" id="viewsContainer">
+            <!-- Pedidos -->
+            <div id="view-orders" class="active-view">
+                <div class="flex-row">
+                    <h2>📋 Lista de Pedidos</h2>
+                    <button id="newOrderBtn" class="secondary">➕ Nuevo pedido</button>
+                </div>
+                <div class="flex-row">
+                    <input type="text" id="searchOrders" class="search-box" placeholder="🔍 Buscar...">
+                    <div class="filter-group">
+                        <select id="statusFilter">
+                            <option value="todos">Todos</option>
+                            <option value="pendiente">Pendiente</option>
+                            <option value="entregado">Entregado</option>
+                            <option value="incompleto">Incompleto</option>
+                        </select>
+                        <div class="date-filter">
+                            <input type="date" id="dateFrom" placeholder="Desde">
+                            <input type="date" id="dateTo" placeholder="Hasta">
+                        </div>
+                    </div>
+                </div>
+                <div id="ordersList"></div>
+            </div>
+            <!-- Clientes -->
+            <div id="view-customers">
+                <div class="flex-row">
+                    <h2>👥 Clientes</h2>
+                    <button id="newCustomerBtn" class="secondary">➕ Nuevo cliente</button>
+                </div>
+                <div id="customersList"></div>
+            </div>
+            <!-- Productos -->
+            <div id="view-products">
+                <h2>📦 Productos</h2>
+                <div class="card">
+                    <p>Subí un archivo CSV o Excel para cargar productos.</p>
+                    <div class="file-upload" id="dropZone">
+                        📂 Arrastrá o hacé clic
+                        <input type="file" id="productFile" accept=".csv, .xls, .xlsx" style="display: none;">
+                    </div>
+                    <div id="productList" style="margin-top:2rem"></div>
+                    <button id="clearProducts" class="secondary" style="margin-top:1rem">🗑️ Limpiar todos</button>
+                </div>
+            </div>
+            <!-- Backup -->
+            <div id="view-backup">
+                <h2>💾 Respaldos</h2>
+                <div class="card">
+                    <button id="exportBackup" style="width:100%; margin-bottom:1rem">📥 Exportar backup</button>
+                    <div class="file-upload" id="importZone">
+                        📂 Restaurar backup (JSON)
+                        <input type="file" id="importFile" accept=".json" style="display: none;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Modales -->
+<div id="orderModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
+    <div style="background:white; border-radius:30px; width:90%; max-width:800px; max-height:90vh; overflow:auto; padding:2rem;">
+        <h3 id="modalTitle">➕ Nuevo Pedido</h3>
+        <form id="orderForm">
+            <input type="hidden" id="orderId">
+            <div class="form-grid">
+                <div>
+                    <div class="form-group">
+                        <label>Cliente</label>
+                        <div class="inline-add">
+                            <select id="customerSelect" required></select>
+                            <button type="button" id="quickAddCustomerBtn" class="secondary" style="width:40px; height:40px; border-radius:50%;">➕</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha</label>
+                        <input type="datetime-local" id="orderDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Estado</label>
+                        <select id="orderStatus">
+                            <option value="pendiente">Pendiente</option>
+                            <option value="entregado">Entregado</option>
+                            <option value="incompleto">Incompleto</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <div class="form-group">
+                        <label>Comentarios</label>
+                        <textarea id="orderComments" placeholder="Notas..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Ticket (Imagen o PDF)</label>
+                        <input type="file" id="ticketPhoto" accept="image/*,application/pdf">
+                        <div id="photoPreviewContainer"></div>
+                    </div>
+                </div>
+            </div>
+            <fieldset style="border:1px solid #eaeef2; border-radius:20px; padding:1rem; margin:1rem 0;">
+                <legend>📦 Productos</legend>
+                <div id="productsContainer"></div>
+                <button type="button" id="addProductBtn" class="secondary" style="margin-top:0.5rem">➕ Agregar</button>
+            </fieldset>
+            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
+                <button type="button" id="cancelOrderBtn" class="secondary">Cancelar</button>
+                <button type="submit" id="saveOrderBtn">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="quickCustomerModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1100;">
+    <div style="background:white; border-radius:30px; width:90%; max-width:400px; padding:2rem;">
+        <h3>➕ Cliente Rápido</h3>
+        <form id="quickCustomerForm">
+            <div class="form-group">
+                <label>Nombre *</label>
+                <input type="text" id="quickName" required>
+            </div>
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input type="text" id="quickPhone">
+            </div>
+            <div class="form-group">
+                <label>Dirección</label>
+                <input type="text" id="quickAddress">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="quickEmail">
+            </div>
+            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:1.5rem;">
+                <button type="button" id="cancelQuickBtn" class="secondary">Cancelar</button>
+                <button type="submit" id="saveQuickBtn">Guardar y usar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="imageModal" class="image-modal" style="display:none;" onclick="this.style.display='none'">
+    <span class="close">&times;</span>
+    <img id="modalImage" src="" alt="Foto">
+</div>
+
+<div id="customerModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:1000;">
+    <div style="background:white; border-radius:30px; width:90%; max-width:500px; padding:2rem;">
+        <h3 id="customerModalTitle">👤 Nuevo Cliente</h3>
+        <form id="customerForm">
+            <input type="hidden" id="customerId">
+            <div class="form-group">
+                <label>Nombre *</label>
+                <input type="text" id="customerName" required>
+            </div>
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input type="text" id="customerPhone">
+            </div>
+            <div class="form-group">
+                <label>Dirección</label>
+                <input type="text" id="customerAddress">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="customerEmail">
+            </div>
+            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
+                <button type="button" id="cancelCustomerBtn" class="secondary">Cancelar</button>
+                <button type="submit" id="saveCustomerBtn">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="globalLoader" class="global-loader hidden">
+    <div class="spinner" style="width:50px; height:50px;"></div>
+</div>
+
+<script>
+// Captura global de errores
+window.addEventListener('error', function(e) {
+    console.error('Error capturado:', e.error);
+    alert('Error inesperado en la aplicación: ' + (e.error?.message || e.message));
+});
+
+(function() {
+    console.log('Iniciando aplicación...');
+
+    // --- Configuración de Firebase ---
+    const firebaseConfig = {
+        apiKey: "AIzaSyD4iPoxUkrOWdyWkMDnOSdoDJNg96SUKTs",
+        authDomain: "repartos-tao.firebaseapp.com",
+        projectId: "repartos-tao",
+        storageBucket: "repartos-tao.firebasestorage.app",
+        messagingSenderId: "794636373269",
+        appId: "1:794636373269:web:12bb9f59b8fc50fe79ad1c"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const storage = firebase.storage();
+
+    // Persistencia offline
+    db.enablePersistence({ synchronizeTabs: true }).catch(err => console.warn('Persistencia:', err));
+
+    // Colecciones
+    const refs = {
+        customers: db.collection('customers'),
+        products: db.collection('products'),
+        orders: db.collection('orders')
+    };
+
+    // --- Estado Centralizado ---
+    const state = {
+        customers: [],
+        products: [],
+        orders: [],
+        currentView: 'orders'
+    };
+
+    // --- Utilidades DOM ---
+    const getEl = (id) => document.getElementById(id);
+    const loader = getEl('globalLoader');
+
+    // Wrapper para operaciones asíncronas (Evita repetir try/catch y loader)
+    async function withLoader(actionMsg, asyncFunc) {
+        if (loader) loader.classList.remove('hidden');
+        try {
+            await asyncFunc();
+        } catch (e) {
+            console.error(`Error en [${actionMsg}]:`, e);
+            alert(`Error: ${actionMsg}. Revisá la consola.`);
+        } finally {
+            if (loader) loader.classList.add('hidden');
+        }
+    }
+
+    // --- Inicialización y Suscripciones (Optimizado) ---
+    // Usamos onSnapshot para cargar la data inicial y escuchar cambios sin usar .get() extra.
+    function subscribeAndLoad() {
+        return Promise.all(['customers', 'products', 'orders'].map(collectionName => {
+            return new Promise((resolve) => {
+                let isFirstLoad = true;
+                let query = refs[collectionName];
+                
+                if (collectionName === 'orders') query = query.orderBy('date', 'desc');
+                else query = query.orderBy('name');
+
+                query.onSnapshot(snap => {
+                    state[collectionName] = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    if (collectionName === 'products') updateProductDatalist();
+                    
+                    // Solo renderizamos si es la vista actual
+                    if (state.currentView === collectionName) renderView(collectionName);
+                    
+                    if (isFirstLoad) {
+                        isFirstLoad = false;
+                        resolve();
+                    }
+                }, err => console.error(`Error en suscripción de ${collectionName}:`, err));
+            });
+        }));
+    }
+
+    async function initApp() {
+        await withLoader('Cargando datos iniciales', async () => {
+            await subscribeAndLoad();
+            setActiveView('orders');
+        });
+    }
+
+    // --- Navegación ---
+    function setActiveView(view) {
+        state.currentView = view;
+        document.querySelectorAll('.views-container > div').forEach(div => div.classList.remove('active-view'));
+        const viewEl = getEl(`view-${view}`);
+        if (viewEl) viewEl.classList.add('active-view');
+        
+        document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+        const activeBtn = document.querySelector(`.nav-btn[data-view="${view}"]`);
+        if (activeBtn) activeBtn.classList.add('active');
+        
+        renderView(view);
+    }
+
+    // --- Vistas ---
+    function renderView(view) {
+        if (view === 'orders') renderOrders();
+        else if (view === 'customers') renderCustomers();
+        else if (view === 'products') renderProductsList();
+    }
+
+    // --- Render Orders ---
+    function renderOrders() {
+        const ordersListDiv = getEl('ordersList');
+        if (!ordersListDiv) return;
+
+        const filterText = getEl('searchOrders')?.value.toLowerCase() || '';
+        const filterStatus = getEl('statusFilter')?.value || 'todos';
+        const from = getEl('dateFrom')?.value || '';
+        const to = getEl('dateTo')?.value || '';
+
+        const filtered = state.orders.filter(o => {
+            if (filterStatus !== 'todos' && o.status !== filterStatus) return false;
+            const d = o.date ? o.date.split('T')[0] : '';
+            if (from && d < from) return false;
+            if (to && d > to) return false;
+            if (filterText) {
+                const c = state.customers.find(c => c.id === o.customerId) || {};
+                const txt = `${c.name} ${c.phone||''} ${c.address||''} ${c.email||''} ${o.comments||''} ${o.items.map(i=>i.productName).join(' ')}`.toLowerCase();
+                return txt.includes(filterText);
+            }
+            return true;
+        });
+
+        if (!filtered.length) {
+            ordersListDiv.innerHTML = '<p class="card">No hay pedidos.</p>';
+            return;
+        }
+
+        let html = '<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Estado</th><th>Productos</th><th>Comentarios</th><th>Acciones</th></tr></thead><tbody>';
+        filtered.forEach(o => {
+            const c = state.customers.find(c => c.id === o.customerId) || { name: '?' };
+            const itemsHtml = o.items.map(i => `<li>${i.productName} x${i.quantity} ($${i.price})</li>`).join('');
+            html += `<tr>
+                <td data-label="Fecha">${o.date ? new Date(o.date).toLocaleString() : ''}</td>
+                <td data-label="Cliente">${c.name}</td>
+                <td data-label="Estado">
+                    <span class="badge ${o.status}" data-action="toggle-status" data-id="${o.id}">${o.status}</span>
+                    <div class="status-menu hidden" id="status-menu-${o.id}">
+                        <button data-status="pendiente" data-id="${o.id}">Pendiente</button>
+                        <button data-status="entregado" data-id="${o.id}">Entregado</button>
+                        <button data-status="incompleto" data-id="${o.id}">Incompleto</button>
+                    </div>
+                </td>
+                <td data-label="Productos"><ul class="product-list">${itemsHtml}</ul></td>
+                <td data-label="Comentarios">${o.comments || ''}</td>
+                <td class="actions-cell" data-label="Acciones">
+                    <button class="icon-btn" data-action="edit-order" data-id="${o.id}">✏️</button>
+                    <button class="icon-btn" data-action="delete-order" data-id="${o.id}">🗑️</button>
+                    ${o.ticketPhoto ? `<button class="icon-btn" data-action="view-photo" data-photo="${o.ticketPhoto}">📷</button>` : ''}
+                </td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+        ordersListDiv.innerHTML = html;
+    }
+
+    // --- Render Customers ---
+    function renderCustomers() {
+        const customersListDiv = getEl('customersList');
+        if (!customersListDiv) return;
+        
+        if (!state.customers.length) {
+            customersListDiv.innerHTML = '<p class="card">No hay clientes.</p>';
+            return;
+        }
+        let html = '<table><thead><tr><th>Nombre</th><th>Teléfono</th><th>Dirección</th><th>Email</th><th>Acciones</th></tr></thead><tbody>';
+        state.customers.forEach(c => {
+            html += `<tr>
+                <td data-label="Nombre">${c.name}</td>
+                <td data-label="Teléfono">${c.phone || ''}</td>
+                <td data-label="Dirección">${c.address || ''}</td>
+                <td data-label="Email">${c.email || ''}</td>
+                <td class="actions-cell" data-label="Acciones">
+                    <button class="icon-btn" data-action="edit-customer" data-id="${c.id}">✏️</button>
+                    <button class="icon-btn" data-action="delete-customer" data-id="${c.id}">🗑️</button>
+                </td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+        customersListDiv.innerHTML = html;
+    }
+
+    // --- Render Products ---
+    function renderProductsList() {
+        const productListDiv = getEl('productList');
+        if (!productListDiv) return;
+
+        if (!state.products.length) {
+            productListDiv.innerHTML = '<p>No hay productos cargados.</p>';
+            return;
+        }
+        let html = '<table><thead><tr><th>Nombre</th><th>Precio</th><th>Acciones</th></tr></thead><tbody>';
+        state.products.slice(0, 100).forEach(p => {
+            html += `<tr>
+                <td data-label="Nombre">${p.name}</td>
+                <td data-label="Precio">${p.price ? '$' + p.price : '-'}</td>
+                <td class="actions-cell" data-label="Acciones">
+                    <button class="icon-btn" data-action="delete-product" data-id="${p.id}">🗑️</button>
+                </td>
+            </tr>`;
+        });
+        if (state.products.length > 100) html += `<tr><td colspan="3">... y ${state.products.length - 100} más</td></tr>`;
+        html += '</tbody></table>';
+        productListDiv.innerHTML = html;
+    }
+
+    function updateProductDatalist() {
+        let datalist = getEl('productDatalist');
+        if (!datalist) {
+            datalist = document.createElement('datalist');
+            datalist.id = 'productDatalist';
+            document.body.appendChild(datalist);
+        }
+        datalist.innerHTML = state.products.map(p => `<option value="${p.name}">${p.price ? '$'+p.price : ''}</option>`).join('');
+    }
+
+    // --- Delegación de Eventos Global (Mejora de Performance) ---
+    document.addEventListener('click', async e => {
+        const target = e.target;
+        
+        // Cerrar menús de estado si clickea afuera
+        if (!target.closest('.status-menu') && !target.closest('[data-action="toggle-status"]')) {
+            document.querySelectorAll('.status-menu').forEach(m => m.classList.add('hidden'));
+        }
+
+        // Acciones de UI basadas en atributos data-action
+        const actionBtn = target.closest('[data-action]');
+        if (!actionBtn) return;
+
+        const action = actionBtn.dataset.action;
+        const id = actionBtn.dataset.id;
+
+        switch (action) {
+            case 'edit-order':
+                openOrderModal(id); break;
+            case 'delete-order':
+                if (confirm('¿Eliminar pedido?')) await withLoader('Eliminando pedido', () => refs.orders.doc(id).delete());
+                break;
+            case 'view-photo':
+                const modalImage = getEl('modalImage');
+                const imageModal = getEl('imageModal');
+                if (modalImage && imageModal) {
+                    modalImage.src = actionBtn.dataset.photo;
+                    imageModal.style.display = 'flex';
+                }
+                break;
+            case 'toggle-status':
+                const menu = getEl(`status-menu-${id}`);
+                if (menu) {
+                    document.querySelectorAll('.status-menu').forEach(m => m.classList.add('hidden'));
+                    const rect = actionBtn.getBoundingClientRect();
+                    menu.style.top = rect.bottom + window.scrollY + 'px';
+                    menu.style.left = rect.left + window.scrollX + 'px';
+                    menu.classList.remove('hidden');
+                }
+                break;
+            case 'edit-customer':
+                openCustomerModal(id); break;
+            case 'delete-customer':
+                if (state.orders.some(o => o.customerId === id)) {
+                    alert('Cliente tiene pedidos, no se puede eliminar');
+                    return;
+                }
+                if (confirm('¿Eliminar cliente?')) await withLoader('Eliminando cliente', () => refs.customers.doc(id).delete());
+                break;
+            case 'delete-product':
+                if (confirm('¿Eliminar producto?')) await withLoader('Eliminando producto', () => refs.products.doc(id).delete());
+                break;
+        }
+
+        // Cambiar estado desde el menú flotante
+        if (target.matches('.status-menu button')) {
+            const status = target.dataset.status;
+            const orderId = target.dataset.id;
+            await withLoader('Actualizando estado', () => refs.orders.doc(orderId).update({ status }));
+            target.closest('.status-menu').classList.add('hidden');
+        }
+    });
+
+    // --- Funciones de Formulario (Modales) ---
+    function openOrderModal(id) {
+        const orderForm = getEl('orderForm');
+        orderForm.reset();
+        getEl('orderId').value = '';
+        getEl('productsContainer').innerHTML = '';
+        const previewContainer = getEl('photoPreviewContainer');
+        previewContainer.innerHTML = ''; // Limpiar previsualización
+        
+        const select = getEl('customerSelect');
+        select.innerHTML = '<option value="">Seleccionar cliente</option>' + state.customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+        if (id) {
+            const o = state.orders.find(order => order.id === id);
+            if (o) {
+                getEl('orderId').value = o.id;
+                select.value = o.customerId;
+                getEl('orderDate').value = o.date;
+                getEl('orderStatus').value = o.status;
+                getEl('orderComments').value = o.comments || '';
+                o.items.forEach(item => addProductRow(item));
+                
+                // Mostrar previsualización del archivo existente
+                if (o.ticketPhoto) {
+                    showFilePreview(o.ticketPhoto, previewContainer, true);
+                }
+            }
+        } else {
+            // Setup default date
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            getEl('orderDate').value = now.toISOString().slice(0, 16);
+            addProductRow();
+        }
+        getEl('orderModal').style.display = 'flex';
+    }
+
+    function showFilePreview(fileUrl, container, isExisting = false) {
+        container.innerHTML = ''; // Limpiar previo
+        const isPdf = fileUrl.toLowerCase().endsWith('.pdf');
+        
+        if (isPdf) {
+            const pdfDiv = document.createElement('div');
+            pdfDiv.className = 'pdf-preview';
+            pdfDiv.innerHTML = `
+                <span>📄 PDF - ${fileUrl.split('/').pop()}</span>
+                <button type="button" class="remove-file-btn" data-remove-file>Eliminar</button>
+            `;
+            container.appendChild(pdfDiv);
+        } else {
+            const img = document.createElement('img');
+            img.src = fileUrl;
+            img.className = 'photo-preview';
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'remove-file-btn';
+            removeBtn.textContent = 'Eliminar';
+            removeBtn.style.display = 'block';
+            removeBtn.style.marginTop = '0.5rem';
+            container.appendChild(img);
+            container.appendChild(removeBtn);
+        }
+        
+        // Botón de eliminar (funciona igual para ambos casos)
+        container.querySelector('[data-remove-file], .remove-file-btn')?.addEventListener('click', () => {
+            container.innerHTML = ''; // Eliminar previsualización
+            getEl('ticketPhoto').value = ''; // Limpiar input file
+        });
+    }
+
+    // Evento change del input file para previsualizar antes de guardar
+    getEl('ticketPhoto')?.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const container = getEl('photoPreviewContainer');
+        container.innerHTML = ''; // Limpiar previsualización anterior
+        
+        if (file.type === 'application/pdf') {
+            // Crear URL de objeto para el PDF
+            const url = URL.createObjectURL(file);
+            // Mostrar nombre y botón eliminar
+            const pdfDiv = document.createElement('div');
+            pdfDiv.className = 'pdf-preview';
+            pdfDiv.innerHTML = `
+                <span>📄 ${file.name}</span>
+                <button type="button" class="remove-file-btn" data-remove-file>Eliminar</button>
+            `;
+            container.appendChild(pdfDiv);
+            // Para poder ver el PDF, podríamos agregar un enlace "Ver PDF" que abra la URL en otra pestaña
+            const viewLink = document.createElement('a');
+            viewLink.href = url;
+            viewLink.target = '_blank';
+            viewLink.textContent = 'Ver PDF';
+            viewLink.style.marginLeft = '1rem';
+            pdfDiv.appendChild(viewLink);
+        } else if (file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const img = document.createElement('img');
+                img.src = ev.target.result;
+                img.className = 'photo-preview';
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'remove-file-btn';
+                removeBtn.textContent = 'Eliminar';
+                removeBtn.style.display = 'block';
+                removeBtn.style.marginTop = '0.5rem';
+                container.appendChild(img);
+                container.appendChild(removeBtn);
+            };
+            reader.readAsDataURL(file);
+        } else {
+            alert('Tipo de archivo no soportado. Seleccioná una imagen o PDF.');
+            e.target.value = ''; // Limpiar input
+            return;
+        }
+        
+        // Evento para el botón eliminar dentro de la previsualización recién creada
+        container.querySelector('[data-remove-file], .remove-file-btn')?.addEventListener('click', () => {
+            container.innerHTML = '';
+            getEl('ticketPhoto').value = '';
+        });
+    });
+
+    function addProductRow(item) {
+        const container = getEl('productsContainer');
+        const div = document.createElement('div');
+        div.className = 'product-item';
+        div.innerHTML = `
+            <input type="text" placeholder="Producto" list="productDatalist" value="${item ? item.productName : ''}" class="product-name">
+            <input type="number" placeholder="Cant" value="${item ? item.quantity : 1}" min="1" style="width:80px;" class="product-qty">
+            <input type="number" placeholder="Precio" value="${item ? item.price : ''}" min="0" step="0.01" style="width:100px;" class="product-price">
+            <button type="button" class="remove-product">✕</button>
+        `;
+        div.querySelector('.remove-product').addEventListener('click', () => div.remove());
+        container.appendChild(div);
+    }
+
+    // --- CRUD con Wrapper Async ---
+    async function saveCustomer(cust) {
+        await withLoader('Guardando cliente', async () => {
+            if (cust.id) await refs.customers.doc(cust.id).set(cust);
+            else await refs.customers.add(cust);
+        });
+    }
+
+    async function saveOrder(order, file) {
+        await withLoader('Guardando pedido', async () => {
+            if (file) {
+                const ref = storage.ref(`tickets/${Date.now()}_${file.name}`);
+                await ref.put(file);
+                order.ticketPhoto = await ref.getDownloadURL();
+            } else {
+                // Si no hay archivo, pero existe previsualización (porque no se tocó), mantener el existente.
+                // Si no hay previsualización, entonces no hay archivo.
+                const previewContainer = getEl('photoPreviewContainer');
+                if (previewContainer && previewContainer.children.length === 0) {
+                    order.ticketPhoto = '';
+                } else {
+                    // Si hay previsualización pero no es de un archivo nuevo, significa que es la existente.
+                    // Ya la tenemos en order.ticketPhoto (del objeto order actual).
+                    // Solo la mantenemos.
+                }
+            }
+            
+            const { id, ...orderData } = order;
+            if (id) await refs.orders.doc(id).set(orderData);
+            else await refs.orders.add(orderData);
+        });
+    }
+
+    // Bindings estáticos (solo se asocian 1 vez)
+    getEl('addProductBtn')?.addEventListener('click', () => addProductRow());
+    
+    // Bindear filtros
+    ['searchOrders', 'statusFilter', 'dateFrom', 'dateTo'].forEach(id => {
+        getEl(id)?.addEventListener('input', renderOrders);
+    });
+    
+    // Cerrar modales (clic afuera)
+    window.addEventListener('click', e => {
+        if (e.target.matches('.modal')) e.target.style.display = 'none';
+    });
+    document.querySelectorAll('.close, .cancel-btn, #cancelOrderBtn, #cancelQuickBtn, #cancelCustomerBtn').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const modal = e.target.closest('.modal');
+            if (modal) modal.style.display = 'none';
+        });
+    });
+
+    // Botón nuevo pedido
+    getEl('newOrderBtn')?.addEventListener('click', () => openOrderModal());
+
+    // Botón cliente rápido
+    getEl('quickAddCustomerBtn')?.addEventListener('click', () => {
+        getEl('quickCustomerModal').style.display = 'flex';
+    });
+    getEl('quickCustomerForm')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const cust = {
+            name: getEl('quickName').value.trim(),
+            phone: getEl('quickPhone').value.trim(),
+            address: getEl('quickAddress').value.trim(),
+            email: getEl('quickEmail').value.trim()
+        };
+        if (!cust.name) return alert('Nombre obligatorio');
+        await saveCustomer(cust);
+        getEl('quickCustomerModal').style.display = 'none';
+        // Actualizar select de clientes en el modal de pedido (se actualizará por la suscripción)
+    });
+
+    // Botón nuevo cliente normal
+    getEl('newCustomerBtn')?.addEventListener('click', () => {
+        getEl('customerModalTitle').textContent = '👤 Nuevo Cliente';
+        getEl('customerForm').reset();
+        getEl('customerId').value = '';
+        getEl('customerModal').style.display = 'flex';
+    });
+
+    getEl('customerForm')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const cust = {
+            id: getEl('customerId').value || undefined,
+            name: getEl('customerName').value.trim(),
+            phone: getEl('customerPhone').value.trim(),
+            address: getEl('customerAddress').value.trim(),
+            email: getEl('customerEmail').value.trim()
+        };
+        if (!cust.name) return alert('Nombre obligatorio');
+        await saveCustomer(cust);
+        getEl('customerModal').style.display = 'none';
+    });
+
+    // Envío de formulario de pedido
+    getEl('orderForm')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const customerId = getEl('customerSelect').value;
+        if (!customerId) return alert('Seleccioná un cliente');
+        const items = [];
+        document.querySelectorAll('#productsContainer .product-item').forEach(row => {
+            const name = row.querySelector('.product-name').value.trim();
+            if (!name) return;
+            items.push({
+                productName: name,
+                quantity: parseInt(row.querySelector('.product-qty').value) || 1,
+                price: parseFloat(row.querySelector('.product-price').value) || 0
+            });
+        });
+        if (!items.length) return alert('Agregá al menos un producto');
+        
+        const fileInput = getEl('ticketPhoto');
+        const file = fileInput.files[0];
+        
+        const order = {
+            id: getEl('orderId').value || undefined,
+            customerId,
+            date: getEl('orderDate').value,
+            status: getEl('orderStatus').value,
+            comments: getEl('orderComments').value,
+            items,
+            ticketPhoto: getEl('orderId').value ? state.orders.find(o => o.id === getEl('orderId').value)?.ticketPhoto || '' : ''
+        };
+        
+        await saveOrder(order, file);
+        getEl('orderModal').style.display = 'none';
+    });
+
+    // --- Inicialización de la app ---
+    initApp();
+})();
+</script>
+</body>
+</html><!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AdminRepartos (Firebase) - Versión Refactorizada</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+    <style>
+        /* (Mismos estilos que ya tenías) */
         * { box-sizing: border-box; }
         .hidden { display: none !important; }
     </style>
